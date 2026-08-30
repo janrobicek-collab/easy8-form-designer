@@ -4,6 +4,14 @@ import type { FormField } from "../types";
 
 defineProps<{ fields: FormField[]; selectedToken: string | null }>();
 defineEmits<{ select: [field: FormField]; remove: [field: FormField] }>();
+
+// A literal "{{ }}" written inline in the template breaks Vue's SFC
+// compiler — it tokenizes the inner braces as the start of a *nested*
+// mustache and reports "Unterminated template". Building the string in
+// script keeps the template's own interpolation delimiters unambiguous.
+function tokenPlaceholder(token: string): string {
+  return `{{ ${token} }}`;
+}
 </script>
 
 <template>
@@ -35,7 +43,7 @@ defineEmits<{ select: [field: FormField]; remove: [field: FormField] }>();
       </header>
 
       <p v-if="field.helpText" class="efd-canvas__help">{{ field.helpText }}</p>
-      <code class="efd-canvas__token">{{ `{{ ${field.token} }}` }}</code>
+      <code class="efd-canvas__token">{{ tokenPlaceholder(field.token) }}</code>
 
       <button type="button" class="efd-canvas__remove" @click.stop="$emit('remove', field)">
         Remove

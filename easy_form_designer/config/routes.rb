@@ -4,12 +4,24 @@ Rails.application.routes.draw do
       post :publish
       post :unpublish
     end
-
-    # Requester-facing fill-in + submit, scoped under the form it belongs to.
-    resource :submission, only: %i[new create show],
-                          controller: "easy_form_designer_submissions",
-                          as: :easy_form_designer_submission
   end
+
+  # Requester-facing fill-in + submit, scoped under the form it belongs to.
+  #
+  # Deliberately not a nested `resource` block: Rails prefixes a nested
+  # resource's `as:` with the parent's own name regardless, producing
+  # easy_form_designer_form_easy_form_designer_submission_path — explicit
+  # routes keep the helper names short and matching what the views call.
+  get "form-designer/forms/:easy_form_designer_form_id/submission/new",
+      to: "easy_form_designer_submissions#new",
+      as: :new_easy_form_designer_form_submission
+
+  get "form-designer/forms/:easy_form_designer_form_id/submission",
+      to: "easy_form_designer_submissions#show",
+      as: :easy_form_designer_form_submission
+
+  post "form-designer/forms/:easy_form_designer_form_id/submission",
+      to: "easy_form_designer_submissions#create"
 
   # Mappable native/custom attributes for a given project + tracker pair.
   # Feeds the builder's "Maps to" dropdown.

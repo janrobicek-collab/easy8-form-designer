@@ -27,6 +27,12 @@ const preview = computed(() =>
 function insert(token: string): void {
   emit("update:descriptionTemplate", `${props.descriptionTemplate}{{ ${token} }}`);
 }
+
+// See the identical note in FieldCanvas.vue: a literal "{{ }}" inline in the
+// template breaks Vue's SFC compiler's mustache tokenizer.
+function tokenPlaceholder(token: string): string {
+  return `{{ ${token} }}`;
+}
 </script>
 
 <template>
@@ -54,7 +60,7 @@ function insert(token: string): void {
         class="efd-templates__chip"
         @click="insert(t.token)"
       >
-        {{ `{{ ${t.token} }}` }} &mdash; {{ t.label }}
+        {{ tokenPlaceholder(t.token) }} &mdash; {{ t.label }}
       </button>
     </div>
 

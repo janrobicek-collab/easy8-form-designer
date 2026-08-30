@@ -25,7 +25,12 @@ module EasyFormDesigner
 
     enum :status, { draft: 0, published: 1 }, prefix: true, default: "draft"
 
-    safe_attributes(*%w[name description project_id tracker_id subject_template description_template])
+    # `fields_attributes` must be listed explicitly: Redmine::SafeAttributes
+    # filters `safe_attributes=` against exactly this list, top-level keys
+    # only — accepts_nested_attributes_for alone does not make a key safe,
+    # it just defines the setter that this list has to permit.
+    safe_attributes(*%w[name description project_id tracker_id subject_template
+                        description_template fields_attributes])
 
     validates :name, presence: true
     validates :project, :tracker, presence: true

@@ -22,6 +22,7 @@ This is an acknowledged exception to the extension-first policy in the root
 | 2 | `app/frontend/entrypoints/easy_form_designer.ts` | New Vite entrypoint exposing `window.EasyFormDesigner.createBuilderApp`. Tracked here at `repo/frontend/entrypoints/`. |
 | 3 | `app/frontend/src/shared/types/global.d.ts` | One added line — `EasyFormDesigner: UnknownObject;` directly after the existing `EasyAutomations` line. |
 | 4 | `easy_engines/Gemfile` | One added line — `gem "easy_form_designer", path: "./easy_form_designer"`. |
+| 5 | `app/frontend/entrypoints/application.js` | One added line — `import "./easy_form_designer";`, next to the existing `import "./automation";`. Discovered by testing: entrypoints aren't wired into a page by their own view — `application.js` is loaded on every page via the base layout and statically imports every feature's entrypoint so its `window.*` global exists everywhere. |
 
 ## Local development
 

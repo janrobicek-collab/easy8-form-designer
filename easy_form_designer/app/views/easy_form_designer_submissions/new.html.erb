@@ -26,24 +26,27 @@
       <% value = @answers[field.token] %>
       <% invalid = @missing_fields&.include?(field) %>
 
+      <% # Only DSPasswordField supports helper_text natively — every other DS
+         # form control here does not, so field.help_text is rendered as a
+         # plain caption instead of being passed through as a keyword. %>
       <% case field.widget %>
       <% when "long_text" %>
         <%= ds_textarea(name: name, value: value, label: field.label,
-                        required: field.required?, rows: 4,
-                        helper_text: field.help_text) %>
+                        required: field.required?, rows: 4) %>
       <% when "select" %>
         <%= ds_select(name: name, value: value, label: field.label,
                       required: field.required?,
-                      helper_text: field.help_text,
                       options: field.options.map { |(l, v)| { label: l, value: v } }) %>
       <% when "date" %>
         <%= ds_datepicker(name: name, value: value, label: field.label,
-                          required: field.required?,
-                          helper_text: field.help_text) %>
+                          required: field.required?) %>
       <% else %>
         <%= ds_text_field(name: name, value: value, label: field.label,
-                          required: field.required?,
-                          helper_text: field.help_text) %>
+                          required: field.required?) %>
+      <% end %>
+
+      <% if field.help_text.present? %>
+        <p class="caption"><%= field.help_text %></p>
       <% end %>
 
       <% if invalid %>

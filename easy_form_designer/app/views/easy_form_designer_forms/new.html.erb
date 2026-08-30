@@ -37,8 +37,8 @@
                   label: l(:field_tracker),
                   value: @form.tracker_id,
                   required: true,
-                  helper_text: l("easy_form_designer.label_gateway_help"),
                   options: Tracker.sorted.map { |t| { label: t.name, value: t.id } }) %>
+    <p class="caption"><%= l("easy_form_designer.label_gateway_help") %></p>
 
     <% if @form.errors.any? %>
       <%= ds_alert(variant: :error, body: @form.errors.full_messages.join(", ")) %>
