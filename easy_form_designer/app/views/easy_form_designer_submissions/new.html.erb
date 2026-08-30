@@ -1,0 +1,54 @@
+<%# Requester-facing form. Server-rendered on purpose — DS components give
+    responsive layout (PRD M12) without putting an SPA in the submit path. %>
+<%= title @form.name %>
+
+<% form_id = "easy_form_designer_submission_form" %>
+
+<%= ds_form_layout(
+      footer_content: ds_action_buttons(
+        actions: { submit: [{ id: "submit", label: l(:button_submit) }] },
+        form_id: form_id
+      )
+    ) do %>
+  <%= ds_form(action: easy_form_designer_form_submission_path(@form), id: form_id) do %>
+    <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+
+    <% if @form.description.present? %>
+      <p><%= @form.description %></p>
+    <% end %>
+
+    <% if flash.now[:error].present? %>
+      <%= ds_alert(variant: :error, body: flash.now[:error]) %>
+    <% end %>
+
+    <% @form.fields.each do |field| %>
+      <% name = "answers[#{field.token}]" %>
+      <% value = @answers[field.token] %>
+      <% invalid = @missing_fields&.include?(field) %>
+
+      <% case field.widget %>
+      <% when "long_text" %>
+        <%= ds_textarea(name: name, value: value, label: field.label,
+                        required: field.required?, rows: 4,
+                        helper_text: field.help_text) %>
+      <% when "select" %>
+        <%= ds_select(name: name, value: value, label: field.label,
+                      required: field.required?,
+                      helper_text: field.help_text,
+                      options: field.options.map { |(l, v)| { label: l, value: v } }) %>
+      <% when "date" %>
+        <%= ds_datepicker(name: name, value: value, label: field.label,
+                          required: field.required?,
+                          helper_text: field.help_text) %>
+      <% else %>
+        <%= ds_text_field(name: name, value: value, label: field.label,
+                          required: field.required?,
+                          helper_text: field.help_text) %>
+      <% end %>
+
+      <% if invalid %>
+        <span class="ds-form-field__error"><%= l(:activerecord_error_blank, default: "cannot be blank") %></span>
+      <% end %>
+    <% end %>
+  <% end %>
+<% end %>

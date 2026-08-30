@@ -1,0 +1,21 @@
+cs:
+  easy_form_designer:
+    top_menu_link: "Formuláře"
+    label_forms: "Formuláře"
+    label_form_new: "Nový formulář"
+    label_gateway: "Cílový projekt a typ úkolu"
+    label_gateway_help: "Určuje, která pole a vlastní atributy budou ve formuláři k dispozici."
+    label_maps_to: "Mapováno na"
+    label_subject_template: "Předmět úkolu"
+    label_description_template: "Popis úkolu"
+    status:
+      draft: "Koncept"
+      published: "Publikováno"
+    error:
+      unmapped_field: "Před publikováním musí být každé pole namapováno na atribut úkolu."
+      unknown_token: "Neznámý token %{token} v šabloně %{template}."
+      no_attributes: "Pro tento projekt a typ úkolu neexistují žádné mapovatelné atributy."
+  permission_view_easy_forms: "Zobrazit formuláře"
+  permission_manage_easy_forms: "Spravovat formuláře"
+  permission_submit_easy_forms: "Odesílat formuláře"
+  project_module_easy_form_designer: "Formuláře"

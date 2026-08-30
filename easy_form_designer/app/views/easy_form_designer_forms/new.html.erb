@@ -1,0 +1,47 @@
+<%# Step 1 — the gateway. Project and task type are chosen before the builder
+    loads, because together they scope every attribute a field may map to. %>
+<%= title l("easy_form_designer.label_form_new") %>
+
+<% form_id = "easy_form_designer_new_form" %>
+
+<%= ds_form_layout(
+      footer_content: ds_action_buttons(
+        actions: {
+          submit: [{ id: "continue", label: l(:button_continue) }],
+          dismiss: [{ id: "cancel", label: l(:button_cancel),
+                      href: easy_form_designer_forms_path }]
+        },
+        form_id: form_id
+      )
+    ) do %>
+  <%= ds_form(action: easy_form_designer_forms_path, id: form_id) do %>
+    <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+
+    <%= ds_text_field(name: "easy_form_designer_form[name]",
+                      value: @form.name,
+                      label: l(:field_name),
+                      required: true) %>
+
+    <%= ds_textarea(name: "easy_form_designer_form[description]",
+                    value: @form.description,
+                    label: l(:field_description),
+                    rows: 3) %>
+
+    <%= ds_select(name: "easy_form_designer_form[project_id]",
+                  label: l(:field_project),
+                  value: @form.project_id,
+                  required: true,
+                  options: Project.active.sorted.map { |p| { label: p.name, value: p.id } }) %>
+
+    <%= ds_select(name: "easy_form_designer_form[tracker_id]",
+                  label: l(:field_tracker),
+                  value: @form.tracker_id,
+                  required: true,
+                  helper_text: l("easy_form_designer.label_gateway_help"),
+                  options: Tracker.sorted.map { |t| { label: t.name, value: t.id } }) %>
+
+    <% if @form.errors.any? %>
+      <%= ds_alert(variant: :error, body: @form.errors.full_messages.join(", ")) %>
+    <% end %>
+  <% end %>
+<% end %>

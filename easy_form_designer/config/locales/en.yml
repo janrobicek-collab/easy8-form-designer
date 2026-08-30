@@ -1,0 +1,22 @@
+en:
+  easy_form_designer:
+    top_menu_link: "Forms"
+    label_forms: "Forms"
+    label_form_new: "New form"
+    label_gateway: "Target project and task type"
+    label_gateway_help: "This determines which fields and custom attributes are available in the form."
+    label_maps_to: "Maps to"
+    label_subject_template: "Task subject"
+    label_description_template: "Task description"
+    status:
+      draft: "Draft"
+      published: "Published"
+    error:
+      unmapped_field: "Every field must be mapped to a task attribute before publishing."
+      unknown_token: "Unknown token %{token} in the %{template} template."
+      no_attributes: "No mappable attributes exist for this project and task type."
+  # Permission labels are looked up at the top level by Redmine, not namespaced.
+  permission_view_easy_forms: "View forms"
+  permission_manage_easy_forms: "Manage forms"
+  permission_submit_easy_forms: "Submit forms"
+  project_module_easy_form_designer: "Forms"

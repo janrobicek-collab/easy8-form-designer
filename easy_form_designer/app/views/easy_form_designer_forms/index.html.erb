@@ -1,0 +1,49 @@
+<%= title l("easy_form_designer.label_forms") %>
+
+<div class="contextual">
+  <%= ds_button(value: l("easy_form_designer.label_form_new"),
+                variant: :primary,
+                href: new_easy_form_designer_form_path) %>
+</div>
+
+<% if @forms.empty? %>
+  <p class="nodata"><%= l(:label_no_data) %></p>
+<% else %>
+  <table class="list">
+    <thead>
+      <tr>
+        <th><%= l(:field_name) %></th>
+        <th><%= l(:field_project) %></th>
+        <th><%= l(:field_tracker) %></th>
+        <th><%= l(:field_status) %></th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @forms.each do |form| %>
+        <tr>
+          <td><%= link_to form.name, edit_easy_form_designer_form_path(form) %></td>
+          <td><%= link_to_project form.project %></td>
+          <td><%= form.tracker %></td>
+          <td>
+            <%= ds_badge(text: l("easy_form_designer.status.#{form.status}"),
+                         state: form.status_published? ? :success : :default) %>
+          </td>
+          <td class="buttons">
+            <% if form.status_published? %>
+              <%= link_to l(:label_open),
+                          new_easy_form_designer_form_submission_path(form),
+                          class: "icon icon-magnifier" %>
+            <% end %>
+            <% if form.deletable?(User.current) %>
+              <%= link_to l(:button_delete),
+                          easy_form_designer_form_path(form),
+                          data: { confirm: l(:text_are_you_sure), turbo_method: :delete },
+                          class: "icon icon-del" %>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>
