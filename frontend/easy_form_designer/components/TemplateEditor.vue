@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { DSTextarea, DSTextField } from "@/src/design_system";
 import type { FormField } from "../types";
+import { tokenPlaceholder } from "../types";
 
 const props = defineProps<{
   fields: FormField[];
@@ -25,13 +26,7 @@ const preview = computed(() =>
 );
 
 function insert(token: string): void {
-  emit("update:descriptionTemplate", `${props.descriptionTemplate}{{ ${token} }}`);
-}
-
-// See the identical note in FieldCanvas.vue: a literal "{{ }}" inline in the
-// template breaks Vue's SFC compiler's mustache tokenizer.
-function tokenPlaceholder(token: string): string {
-  return `{{ ${token} }}`;
+  emit("update:descriptionTemplate", `${props.descriptionTemplate}${tokenPlaceholder(token)}`);
 }
 </script>
 
@@ -40,9 +35,12 @@ function tokenPlaceholder(token: string): string {
     <DSTextField
       :model-value="subjectTemplate"
       label="Task subject"
-      helper-text="Use {{ token }} to insert an answer."
       @update:model-value="(v: string) => emit('update:subjectTemplate', v)"
     />
+    <p class="caption">
+      Use {{ tokenPlaceholder("token") }} to insert an answer — mapping a field straight to
+      Subject or Description fills its token in here automatically.
+    </p>
 
     <DSTextarea
       :model-value="descriptionTemplate"

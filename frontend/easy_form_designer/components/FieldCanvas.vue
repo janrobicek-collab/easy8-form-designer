@@ -1,17 +1,10 @@
 <script setup lang="ts">
 import { DSBadge } from "@/src/design_system";
 import type { FormField } from "../types";
+import { tokenPlaceholder } from "../types";
 
 defineProps<{ fields: FormField[]; selectedToken: string | null }>();
 defineEmits<{ select: [field: FormField]; remove: [field: FormField] }>();
-
-// A literal "{{ }}" written inline in the template breaks Vue's SFC
-// compiler — it tokenizes the inner braces as the start of a *nested*
-// mustache and reports "Unterminated template". Building the string in
-// script keeps the template's own interpolation delimiters unambiguous.
-function tokenPlaceholder(token: string): string {
-  return `{{ ${token} }}`;
-}
 </script>
 
 <template>
@@ -34,20 +27,22 @@ function tokenPlaceholder(token: string): string {
           <abbr v-if="field.required" title="Required">*</abbr>
         </span>
 
-        <!-- An unmapped field blocks publishing, so surface it on the card
-             itself rather than only in the config panel. -->
-        <DSBadge
-          :text="field.mappedAttribute || field.customFieldId ? 'Mapped' : 'Not mapped'"
-          :state="field.mappedAttribute || field.customFieldId ? 'success' : 'error'"
-        />
+        <div class="efd-canvas__head-actions">
+          <!-- An unmapped field blocks publishing, so surface it on the card
+               itself rather than only in the config panel. -->
+          <DSBadge
+            :text="field.mappedAttribute || field.customFieldId ? 'Mapped' : 'Not mapped'"
+            :state="field.mappedAttribute || field.customFieldId ? 'success' : 'error'"
+          />
+
+          <button type="button" class="efd-canvas__remove" @click.stop="$emit('remove', field)">
+            Remove
+          </button>
+        </div>
       </header>
 
       <p v-if="field.helpText" class="efd-canvas__help">{{ field.helpText }}</p>
       <code class="efd-canvas__token">{{ tokenPlaceholder(field.token) }}</code>
-
-      <button type="button" class="efd-canvas__remove" @click.stop="$emit('remove', field)">
-        Remove
-      </button>
     </article>
   </section>
 </template>
@@ -83,6 +78,16 @@ function tokenPlaceholder(token: string): string {
     gap: var(--Scale-Size-2, 8px);
   }
 
+  // A sibling of the badge in the flex header, not absolutely positioned
+  // over it — an earlier version stacked both in the same top-right corner,
+  // so on hover "Remove" rendered directly on top of "Mapped"/"Not mapped".
+  &__head-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--Scale-Size-2, 8px);
+    flex-shrink: 0;
+  }
+
   &__label {
     font-weight: 600;
   }
@@ -96,9 +101,6 @@ function tokenPlaceholder(token: string): string {
   }
 
   &__remove {
-    position: absolute;
-    top: var(--Scale-Size-2, 8px);
-    right: var(--Scale-Size-2, 8px);
     border: none;
     background: none;
     color: var(--Colors-Danger-500, #ff1066);

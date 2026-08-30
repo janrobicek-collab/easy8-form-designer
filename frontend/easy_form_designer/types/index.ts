@@ -54,6 +54,14 @@ export interface ApiForm {
   fields: ApiFormField[];
 }
 
+// A literal "{{ }}" written inline in a Vue template breaks the SFC
+// compiler — it tokenizes the inner braces as the start of a *nested*
+// mustache and reports "Unterminated template". Building the string here
+// keeps every component's own interpolation delimiters unambiguous.
+export function tokenPlaceholder(token: string): string {
+  return `{{ ${token} }}`;
+}
+
 export function fieldFromApi(f: ApiFormField): FormField {
   return {
     id: f.id,

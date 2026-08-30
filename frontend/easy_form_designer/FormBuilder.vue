@@ -7,7 +7,7 @@ import FieldConfig from "./components/FieldConfig.vue";
 import TemplateEditor from "./components/TemplateEditor.vue";
 import { useMappingOptions } from "./composables/useMappingOptions";
 import type { ApiForm, BuilderContext, FormField, Widget } from "./types";
-import { fieldFromApi } from "./types";
+import { fieldFromApi, tokenPlaceholder } from "./types";
 
 const props = defineProps<{ context: BuilderContext; initialForm: ApiForm | null }>();
 
@@ -79,11 +79,33 @@ function addField(widget: Widget): void {
   selectedToken.value = field.token;
 }
 
+// Appends a field's token to a template if it isn't already referenced
+// there — used to prefill Subject/Description when a field is mapped
+// straight to one of them, so the author doesn't have to remember the
+// field's token and hand-type "{{ token }}" themselves.
+function withTokenPrefilled(template: string, token: string): string {
+  const placeholder = tokenPlaceholder(token);
+  if (template.includes(placeholder)) return template;
+
+  return template.length ? `${template} ${placeholder}` : placeholder;
+}
+
 function updateField(updated: FormField): void {
   markDirty();
 
   const index = fields.value.findIndex((f) => f.token === selectedToken.value);
   if (index === -1) return;
+
+  const previous = fields.value[index];
+
+  // Only on the transition INTO subject/description — not on every edit of
+  // an already-mapped field, or the token would keep re-appending.
+  if (updated.mappedAttribute === "subject" && previous.mappedAttribute !== "subject") {
+    subjectTemplate.value = withTokenPrefilled(subjectTemplate.value, updated.token);
+  }
+  if (updated.mappedAttribute === "description" && previous.mappedAttribute !== "description") {
+    descriptionTemplate.value = withTokenPrefilled(descriptionTemplate.value, updated.token);
+  }
 
   fields.value[index] = updated;
   selectedToken.value = updated.token;
