@@ -8,6 +8,8 @@ en:
     label_maps_to: "Maps to"
     label_subject_template: "Task subject"
     label_description_template: "Task description"
+    label_open_form: "Open"
+    button_continue: "Continue"
     status:
       draft: "Draft"
       published: "Published"

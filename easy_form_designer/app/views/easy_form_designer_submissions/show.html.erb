@@ -4,7 +4,7 @@
 <%= ds_alert(
       variant: :success,
       header: l(:notice_successful_create),
-      body: l(:label_issue) + " ##{@submission.issue&.id} " + l(:label_created_on) + " " +
+      body: l(:label_issue) + " ##{@submission.issue&.id} " + l(:field_created_on) + " " +
             format_time(@submission.created_at)
     ) %>
 

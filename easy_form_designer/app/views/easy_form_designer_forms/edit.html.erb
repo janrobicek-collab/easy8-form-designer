@@ -2,7 +2,7 @@
     This ERB is only the mount shell; the builder itself is the Vue app in
     core at app/frontend/src/easy_form_designer/. Same pattern as
     easy_automations_rules/new.html.erb. %>
-<%= title @form.name %>
+<%= title [l("easy_form_designer.label_forms"), easy_form_designer_forms_path], @form.name %>
 
 <div class="contextual">
   <% if @form.status_published? %>
@@ -10,7 +10,7 @@
                   variant: :secondary,
                   href: unpublish_easy_form_designer_form_path(@form),
                   data: { turbo_method: :post }) %>
-    <%= ds_button(value: l(:label_open),
+    <%= ds_button(value: l("easy_form_designer.label_open_form"),
                   variant: :secondary,
                   href: new_easy_form_designer_form_submission_path(@form)) %>
   <% else %>

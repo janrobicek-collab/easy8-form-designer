@@ -8,6 +8,8 @@ cs:
     label_maps_to: "Mapováno na"
     label_subject_template: "Předmět úkolu"
     label_description_template: "Popis úkolu"
+    label_open_form: "Otevřít"
+    button_continue: "Pokračovat"
     status:
       draft: "Koncept"
       published: "Publikováno"

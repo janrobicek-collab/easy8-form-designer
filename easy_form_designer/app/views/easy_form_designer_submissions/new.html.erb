@@ -10,7 +10,7 @@
         form_id: form_id
       )
     ) do %>
-  <%= ds_form(action: easy_form_designer_form_submission_path(@form), id: form_id) do %>
+  <%= ds_form(action: easy_form_designer_form_submission_path(@form), method: :post, id: form_id) do %>
     <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
 
     <% if @form.description.present? %>
@@ -34,9 +34,21 @@
         <%= ds_textarea(name: name, value: value, label: field.label,
                         required: field.required?, rows: 4) %>
       <% when "select" %>
-        <%= ds_select(name: name, value: value, label: field.label,
-                      required: field.required?,
-                      options: field.options.map { |(l, v)| { label: l, value: v } }) %>
+        <%# Plain native select, not ds_select — see the note in
+            easy_form_designer_forms/new.html.erb: <easy8-ds-select> crashes
+            its own internal Vue mount client-side regardless of wrapping
+            context, leaving the dropdown permanently empty. A requester
+            hitting that on a real Dropdown-mapped field would be unable to
+            submit at all, so this isn't a cosmetic downgrade. %>
+        <div class="form-group">
+          <label for="field_<%= field.token %>">
+            <%= field.label %><%= " *".html_safe if field.required? %>
+          </label>
+          <%= select_tag name,
+                        options_for_select(field.options, value),
+                        include_blank: !field.required?, required: field.required?,
+                        id: "field_#{field.token}" %>
+        </div>
       <% when "date" %>
         <%= ds_datepicker(name: name, value: value, label: field.label,
                           required: field.required?) %>

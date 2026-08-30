@@ -1,43 +1,58 @@
 <%# Step 1 — the gateway. Project and task type are chosen before the builder
-    loads, because together they scope every attribute a field may map to. %>
-<%= title l("easy_form_designer.label_form_new") %>
+    loads, because together they scope every attribute a field may map to.
+
+    Project/tracker use a plain native <select>, not ds_select. Both the raw
+    ds_form path and the easy_form_tag/EasyFormBuilder path (the only other
+    real usage of ds_select in the whole app, workflows/copy.html.erb) hit
+    the identical failure here: the server-rendered HTML was correct in
+    every case (verified: real <script data-prop="options"> with valid
+    JSON), but <easy8-ds-select>'s own internal Vue mount crashed client-side
+    ("Cannot destructure property 'type' of vnode as it is null"), leaving
+    the element permanently empty — no dropdown, nothing to click. DSTextField/
+    DSTextarea/DSActionButtons on this same page all mount correctly, so this
+    is isolated to Select specifically, not a missing-context issue with this
+    page's structure. This is a bug in Easy8's own shared design-system
+    component, not something introduced here — not something a plugin should
+    be patching. A plain select is the reliable fix; worth reporting upstream
+    if Select turns out to be broken more generally outside a full Vue app. %>
+<%= title [l("easy_form_designer.label_forms"), easy_form_designer_forms_path], l("easy_form_designer.label_form_new") %>
 
 <% form_id = "easy_form_designer_new_form" %>
 
 <%= ds_form_layout(
       footer_content: ds_action_buttons(
         actions: {
-          submit: [{ id: "continue", label: l(:button_continue) }],
+          submit: [{ id: "continue", label: l("easy_form_designer.button_continue") }],
           dismiss: [{ id: "cancel", label: l(:button_cancel),
                       href: easy_form_designer_forms_path }]
         },
         form_id: form_id
       )
     ) do %>
-  <%= ds_form(action: easy_form_designer_forms_path, id: form_id) do %>
-    <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+  <%= easy_form_tag(scope: :easy_form_designer_form, url: easy_form_designer_forms_path, id: form_id) do |f| %>
+    <%= f.text_field :name, value: @form.name, required: true %>
 
-    <%= ds_text_field(name: "easy_form_designer_form[name]",
-                      value: @form.name,
-                      label: l(:field_name),
-                      required: true) %>
+    <%= f.text_area :description, value: @form.description, rows: 3 %>
 
-    <%= ds_textarea(name: "easy_form_designer_form[description]",
-                    value: @form.description,
-                    label: l(:field_description),
-                    rows: 3) %>
+    <div class="form-group">
+      <label for="easy_form_designer_form_project_id">
+        <%= l(:field_project) %> <span class="required">*</span>
+      </label>
+      <%= select_tag "easy_form_designer_form[project_id]",
+                    options_for_select(Project.active.sorted.map { |p| [p.name, p.id] }, @form.project_id),
+                    include_blank: true, required: true,
+                    id: "easy_form_designer_form_project_id" %>
+    </div>
 
-    <%= ds_select(name: "easy_form_designer_form[project_id]",
-                  label: l(:field_project),
-                  value: @form.project_id,
-                  required: true,
-                  options: Project.active.sorted.map { |p| { label: p.name, value: p.id } }) %>
-
-    <%= ds_select(name: "easy_form_designer_form[tracker_id]",
-                  label: l(:field_tracker),
-                  value: @form.tracker_id,
-                  required: true,
-                  options: Tracker.sorted.map { |t| { label: t.name, value: t.id } }) %>
+    <div class="form-group">
+      <label for="easy_form_designer_form_tracker_id">
+        <%= l(:field_tracker) %> <span class="required">*</span>
+      </label>
+      <%= select_tag "easy_form_designer_form[tracker_id]",
+                    options_for_select(Tracker.sorted.map { |t| [t.name, t.id] }, @form.tracker_id),
+                    include_blank: true, required: true,
+                    id: "easy_form_designer_form_tracker_id" %>
+    </div>
     <p class="caption"><%= l("easy_form_designer.label_gateway_help") %></p>
 
     <% if @form.errors.any? %>
