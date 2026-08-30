@@ -24,6 +24,14 @@ const saving = ref(false);
 const saveError = ref<string | null>(null);
 const savedJustNow = ref(false);
 
+// Rails' accepts_nested_attributes_for only deletes a child record when it
+// is explicitly present in fields_attributes with _destroy set — simply
+// leaving a persisted field out of the array (which is all removeField did
+// on its own) saves successfully and silently leaves it untouched in the
+// database. Ids collected here get an explicit `_destroy: true` entry in
+// the next save() call.
+const pendingDestroyIds = ref<number[]>([]);
+
 const { options, loading, load } = useMappingOptions(props.context);
 
 const selectedField = computed(
@@ -148,6 +156,10 @@ function updateField(updated: FormField): void {
 function removeField(field: FormField): void {
   markDirty();
 
+  // A field that was already saved needs an explicit _destroy on the next
+  // save — one that only ever existed client-side can simply be dropped.
+  if (field.id != null) pendingDestroyIds.value.push(field.id);
+
   fields.value = fields.value.filter((f) => f.token !== field.token);
   if (selectedToken.value === field.token) selectedToken.value = null;
 }
@@ -191,17 +203,20 @@ async function save(): Promise<void> {
         easy_form_designer_form: {
           subject_template: subjectTemplate.value,
           description_template: descriptionTemplate.value,
-          fields_attributes: fields.value.map((f, i) => ({
-            id: f.id,
-            position: i + 1,
-            label: f.label,
-            help_text: f.helpText,
-            token: f.token,
-            widget: f.widget,
-            required: f.required,
-            mapped_attribute: f.mappedAttribute,
-            custom_field_id: f.customFieldId,
-          })),
+          fields_attributes: [
+            ...fields.value.map((f, i) => ({
+              id: f.id,
+              position: i + 1,
+              label: f.label,
+              help_text: f.helpText,
+              token: f.token,
+              widget: f.widget,
+              required: f.required,
+              mapped_attribute: f.mappedAttribute,
+              custom_field_id: f.customFieldId,
+            })),
+            ...pendingDestroyIds.value.map((id) => ({ id, _destroy: true })),
+          ],
         },
       }),
     });
@@ -217,6 +232,7 @@ async function save(): Promise<void> {
     fields.value = saved.fields.map(fieldFromApi);
     subjectTemplate.value = saved.subject_template ?? "";
     descriptionTemplate.value = saved.description_template ?? "";
+    pendingDestroyIds.value = [];
     savedJustNow.value = true;
   } catch (e) {
     saveError.value = e instanceof Error ? e.message : String(e);
