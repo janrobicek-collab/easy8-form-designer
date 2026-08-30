@@ -9,6 +9,7 @@ cs:
     label_subject_template: "Předmět úkolu"
     label_description_template: "Popis úkolu"
     label_open_form: "Otevřít"
+    label_required: "Povinné"
     button_continue: "Pokračovat"
     status:
       draft: "Koncept"

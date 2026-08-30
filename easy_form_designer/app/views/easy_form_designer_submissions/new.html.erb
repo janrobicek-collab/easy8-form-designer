@@ -50,8 +50,17 @@
                         id: "field_#{field.token}" %>
         </div>
       <% when "date" %>
-        <%= ds_datepicker(name: name, value: value, label: field.label,
-                          required: field.required?) %>
+        <%# DesignSystem::Components::Datepicker has no required: keyword at
+            all (confirmed from its initialize signature) — passing one
+            raises ArgumentError unconditionally. Required-ness is still
+            enforced server-side by missing_required_fields regardless;
+            label: is kept so the component renders its own properly
+            associated <label>, so the required marker can only be added
+            alongside it, not inside it. %>
+        <%= ds_datepicker(name: name, value: value, label: field.label) %>
+        <% if field.required? %>
+          <p class="caption"><%= l("easy_form_designer.label_required") %></p>
+        <% end %>
       <% else %>
         <%= ds_text_field(name: name, value: value, label: field.label,
                           required: field.required?) %>
