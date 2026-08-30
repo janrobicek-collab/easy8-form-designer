@@ -43,15 +43,29 @@ watch(selectedField, (field) => {
   if (field) void load(field.widget);
 });
 
-function tokenFor(label: string): string {
+// `excludeToken` lets a field's own current token be re-derived without
+// colliding with itself — needed for the rename case below, not just for a
+// brand-new field (which isn't in `fields.value` yet either way).
+function tokenFor(label: string, excludeToken: string | null = null): string {
   const base = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "field";
   let candidate = base;
   let n = 1;
-  while (fields.value.some((f) => f.token === candidate)) {
+  while (fields.value.some((f) => f.token === candidate && f.token !== excludeToken)) {
     n += 1;
     candidate = `${base}_${n}`;
   }
   return candidate;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Rewrites every "{{ oldToken }}" in a template to the new token, tolerant
+// of the same whitespace padding TemplateCompiler accepts server-side.
+function renameTokenInTemplate(template: string, oldToken: string, newToken: string): string {
+  const pattern = new RegExp(`\\{\\{\\s*${escapeRegExp(oldToken)}\\s*\\}\\}`, "g");
+  return template.replace(pattern, tokenPlaceholder(newToken));
 }
 
 // Any further edit invalidates the "Saved." banner from a previous save —
@@ -97,6 +111,26 @@ function updateField(updated: FormField): void {
   if (index === -1) return;
 
   const previous = fields.value[index];
+
+  // The token tracks the label, not something authored independently — a
+  // field renamed from "Untitled field" to "Employee ID" would otherwise
+  // keep showing as {{ untitled_field_3 }} everywhere forever, which stops
+  // meaning anything once a form has more than a couple of fields. Any
+  // template that already referenced the old token is rewritten to match,
+  // so a rename never silently breaks the subject/description output.
+  if (updated.label !== previous.label) {
+    const regeneratedToken = tokenFor(updated.label, previous.token);
+
+    if (regeneratedToken !== previous.token) {
+      subjectTemplate.value = renameTokenInTemplate(subjectTemplate.value, previous.token, regeneratedToken);
+      descriptionTemplate.value = renameTokenInTemplate(
+        descriptionTemplate.value,
+        previous.token,
+        regeneratedToken
+      );
+      updated = { ...updated, token: regeneratedToken };
+    }
+  }
 
   // Only on the transition INTO subject/description — not on every edit of
   // an already-mapped field, or the token would keep re-appending.
