@@ -35,20 +35,31 @@ RSpec.describe EasyFormDesigner::TemplateCompiler, logged: :admin do
 
       it { expect(compiler.subject).to eq("") }
     end
+
+    context "when an answer contains HTML and newlines" do
+      let(:answers) { { "who" => "a & b <c>\nsecond line", "when_needed" => "2026-09-15" } }
+
+      # The subject is a plain varchar, never rendered as HTML — escaping or
+      # <br>-ing it the way the description does would put literal entities
+      # and tags into the task title.
+      it "is left exactly as typed", :aggregate_failures do
+        expect(compiler.subject).to eq("Request — a & b <c>\nsecond line")
+        expect(compiler.subject).not_to include("&amp;")
+        expect(compiler.subject).not_to include("<br>")
+      end
+    end
   end
 
   describe "#description" do
     it "resolves every token" do
-      # A single "\n" in the authored template becomes a real CommonMark
-      # paragraph break ("\n\n") — see the note on TemplateCompiler#hard_wrap.
-      expect(compiler.description).to eq("Who: John Snow\n\nWhen: #{I18n.l(Date.parse('2026-09-15'))}")
+      expect(compiler.description).to eq("Who: John Snow\nWhen: #{I18n.l(Date.parse('2026-09-15'))}")
     end
 
     context "when an answer is missing" do
       let(:answers) { { "who" => "John Snow" } }
 
       it "renders an empty string rather than the raw token" do
-        expect(compiler.description).to eq("Who: John Snow\n\nWhen: ")
+        expect(compiler.description).to eq("Who: John Snow\nWhen: ")
       end
     end
 
@@ -65,7 +76,56 @@ RSpec.describe EasyFormDesigner::TemplateCompiler, logged: :admin do
         expect { compiler.description }.to raise_error(described_class::UnknownToken, /deleted_field/)
       end
     end
+
+    # The description is rendered as HTML by CKEditor::HTML::Formatter, so an
+    # answer substituted into it is markup unless escaped — and answers are
+    # requester-supplied.
+    context "when an answer contains HTML" do
+      let(:answers) { { "who" => "<script>alert(1)</script>", "when_needed" => "2026-09-15" } }
+
+      it "escapes it rather than emitting live markup" do
+        expect(compiler.description).to include("&lt;script&gt;alert(1)&lt;/script&gt;")
+        expect(compiler.description).not_to include("<script>")
+      end
+    end
+
+    context "when an answer spans multiple lines" do
+      let(:answers) { { "who" => "line one\nline two", "when_needed" => "2026-09-15" } }
+
+      # Newlines are invisible in HTML, so a multi-line answer would otherwise
+      # collapse onto one line in the created task.
+      it "converts its line breaks to <br>" do
+        expect(compiler.description).to include("line one<br>line two")
+      end
+    end
+
+    context "when a token is wrapped in editor markup" do
+      let(:form) do
+        create(:easy_form_designer_form,
+               project: project, tracker: tracker,
+               description_template: "<p><strong>{{ who }}</strong></p>")
+      end
+
+      it "still resolves the token" do
+        expect(compiler.description).to eq("<p><strong>John Snow</strong></p>")
+      end
+    end
+
+    context "when CKEditor emitted non-breaking spaces inside the braces" do
+      let(:form) do
+        create(:easy_form_designer_form,
+               project: project, tracker: tracker,
+               description_template: "Who:&nbsp;{{&nbsp;who&nbsp;}}")
+      end
+
+      # A token that looks correct in the editor but silently fails to resolve
+      # is the worst possible failure mode here.
+      it "still resolves the token" do
+        expect(compiler.description).to eq("Who: John Snow")
+      end
+    end
   end
+
 
   describe "token whitespace tolerance" do
     let(:form) do

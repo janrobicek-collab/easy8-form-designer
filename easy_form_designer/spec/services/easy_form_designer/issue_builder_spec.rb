@@ -65,10 +65,8 @@ RSpec.describe EasyFormDesigner::IssueBuilder, logged: :admin do
       issue = build_issue.issue
 
       expect(issue.subject).to eq("Access request — John Snow")
-      # Redmine normalises stored text to CRLF, so compare on normalised
-      # breaks; and a single authored "\n" becomes a real CommonMark
-      # paragraph break ("\n\n") — see TemplateCompiler#hard_wrap.
-      expect(issue.description.gsub("\r\n", "\n")).to eq("Employee: John Snow\n\nPlatform: Linux")
+      # Redmine normalises stored text to CRLF, so compare on normalised breaks.
+      expect(issue.description.gsub("\r\n", "\n")).to eq("Employee: John Snow\nPlatform: Linux")
     end
 
     # This is the assertion that matters. Redmine silently drops custom values

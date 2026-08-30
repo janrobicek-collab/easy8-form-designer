@@ -1,4 +1,5 @@
 import { createApp } from "vue";
+import VueDOMPurifyHTML from "vue-dompurify-html";
 import FormBuilder from "./FormBuilder.vue";
 import type { ApiForm, BuilderContext, CreateBuilderData } from "./types";
 
@@ -23,7 +24,14 @@ export function createBuilderApp({ rootContainerId }: CreateBuilderData): void {
   // in the database.
   const initialForm = readInitialForm(el.dataset.initialId);
 
-  createApp(FormBuilder, { context, initialForm }).mount(el);
+  const app = createApp(FormBuilder, { context, initialForm });
+
+  // Powers v-dompurify-html in TemplateEditor.vue, which renders the
+  // description template as HTML for the live preview. Registered the same way
+  // core does it in src/forms/main.ts.
+  app.use(VueDOMPurifyHTML);
+
+  app.mount(el);
 }
 
 function readInitialForm(scriptId: string | undefined): ApiForm | null {

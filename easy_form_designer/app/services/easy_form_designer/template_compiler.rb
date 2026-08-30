@@ -5,6 +5,20 @@ module EasyFormDesigner
   # An unknown token is an error, never a silent blank — a template that
   # references a field somebody later deleted should fail loudly at submit
   # time rather than quietly producing a half-empty task description.
+  #
+  # The two templates target different formats and are NOT interchangeable:
+  #
+  # * subject      -> plain text. `issues.subject` is a plain varchar.
+  # * description  -> HTML. Easy8 renders task descriptions exclusively through
+  #   CKEditor::HTML::Formatter — `Redmine::WikiFormatting.formatter` ignores the
+  #   `text_formatting` setting entirely and always returns it. Nothing in that
+  #   pipeline converts newlines, so a plain-text description renders as one
+  #   collapsed line.
+  #
+  # That difference drives the escaping split below: an answer substituted into
+  # the description must be HTML-escaped (it is requester-supplied) and have its
+  # line breaks turned into <br>, while the same answer in the subject must stay
+  # exactly as typed.
   class TemplateCompiler
     TOKEN_PATTERN = /\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/
 
@@ -21,12 +35,12 @@ module EasyFormDesigner
 
     # @return [String]
     def subject
-      compile(form.subject_template, :subject)
+      compile(form.subject_template, :subject) { |token| display_value(token) }
     end
 
-    # @return [String]
+    # @return [String] an HTML fragment
     def description
-      compile(hard_wrap(form.description_template), :description)
+      compile(form.description_template, :description) { |token| html_value(token) }
     end
 
     # Tokens referenced by a template that no field on the form provides.
@@ -36,45 +50,51 @@ module EasyFormDesigner
     # @return [Array<String>]
     def self.unknown_tokens(form, template)
       known = form.fields.map(&:token)
-      template.to_s.scan(TOKEN_PATTERN).flatten.uniq - known
+      normalize_entities(template).scan(TOKEN_PATTERN).flatten.uniq - known
+    end
+
+    # CKEditor emits a non-breaking space for some typed spaces, so a token the
+    # author sees as "{{ name }}" can reach us as "{{&nbsp;name&nbsp;}}" and
+    # silently fail TOKEN_PATTERN — a token that looks correct in the editor but
+    # never resolves. Normalising both the entity and the literal U+00A0 keeps
+    # matching aligned with what the author actually sees.
+    #
+    # @param template [String, nil]
+    # @return [String]
+    def self.normalize_entities(template)
+      template.to_s.gsub(/&nbsp;|\u00A0/, " ")
     end
 
     private
 
     # @param template [String]
     # @param which [Symbol] which template, for the error message
+    # @yieldparam token [String]
     # @return [String]
     def compile(template, which)
       return "" if template.blank?
 
-      template.gsub(TOKEN_PATTERN) do
+      self.class.normalize_entities(template).gsub(TOKEN_PATTERN) do
         token = Regexp.last_match(1)
         raise UnknownToken, unknown_token_message(token, which) unless known_token?(token)
 
-        display_value(token)
+        yield(token)
       end
-    end
-
-    # A single "\n" in the admin's template (one Enter key press) is stored
-    # correctly, but Redmine's CommonMark formatter treats a lone newline as
-    # a soft break — no visible line break at all in the rendered task,
-    # collapsing every authored line into one continuous sentence — unless
-    # the whole instance has `common_mark_enable_hardbreaks` turned on
-    # (Redmine::Configuration, not something this engine controls or should
-    # flip instance-wide just for its own output). A blank line (two
-    # newlines) is a real CommonMark paragraph break, which always renders
-    # visibly regardless of that setting, so every authored line break is
-    # promoted to one here — this is description-only; the subject line
-    # isn't markdown-rendered at all.
-    #
-    # @return [String]
-    def hard_wrap(template)
-      template.to_s.gsub(/\r\n/, "\n").gsub(/\n+/, "\n\n")
     end
 
     # @return [Boolean]
     def known_token?(token)
       form.fields.any? { |f| f.token == token }
+    end
+
+    # An answer rendered for the HTML description: escaped, because it is
+    # requester-supplied and lands inside markup, then with its line breaks
+    # promoted to <br> so a multi-line answer stays multi-line in the task.
+    #
+    # @return [String]
+    def html_value(token)
+      escaped = ERB::Util.html_escape(display_value(token))
+      escaped.gsub(/\r\n|\r|\n/, "<br>")
     end
 
     # Renders one answer for inclusion in text. Choice fields store the raw

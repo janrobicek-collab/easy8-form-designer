@@ -25,6 +25,15 @@ module EasyFormDesigner
 
     enum :status, { draft: 0, published: 1 }, prefix: true, default: "draft"
 
+    # The description template is authored in CKEditor and stored as HTML —
+    # Easy8 renders task descriptions exclusively through
+    # CKEditor::HTML::Formatter. Scrubbed on save with the same scrubber
+    # EasyIssueTemplate uses for its own issue description, so unsafe markup
+    # cannot be persisted while legitimate formatting survives. The subject
+    # template is deliberately not scrubbed: it is plain text, never rendered
+    # as HTML.
+    html_fragment :description_template, scrub: :strip
+
     # `fields_attributes` must be listed explicitly: Redmine::SafeAttributes
     # filters `safe_attributes=` against exactly this list, top-level keys
     # only — accepts_nested_attributes_for alone does not make a key safe,

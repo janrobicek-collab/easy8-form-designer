@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { DSTextarea, DSTextField } from "@/src/design_system";
+import type { EasyEditorInstance } from "@/src/ckeditor/easy_editor/types/easyEditor";
 import type { FormField } from "../types";
 import { tokenPlaceholder } from "../types";
+
+// A stable id is required, not cosmetic: EasyEditor registers every live
+// instance under its element id in window.CKEDITOR.instances, and that is the
+// only handle we get for inserting a token at the caret.
+const DESCRIPTION_EDITOR_ID = "efd-description-editor";
+
+const TOKEN_RE = /\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/g;
 
 const props = defineProps<{
   fields: FormField[];
@@ -17,16 +25,46 @@ const emit = defineEmits<{
 
 const tokens = computed(() => props.fields.map((f) => ({ token: f.token, label: f.label })));
 
-/** Rough preview using the field labels as stand-in answers. */
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// The template is HTML now, so the preview is rendered as HTML rather than
+// printed as source. Field labels are escaped and wrapped in <mark> so a label
+// containing angle brackets can't inject markup into the admin's own preview.
 const preview = computed(() =>
-  props.descriptionTemplate.replace(/\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/g, (match, token: string) => {
+  props.descriptionTemplate.replace(TOKEN_RE, (match, token: string) => {
     const field = props.fields.find((f) => f.token === token);
-    return field ? `<${field.label}>` : match;
+    return field ? `<mark>${escapeHtml(field.label)}</mark>` : match;
   })
 );
 
+function descriptionEditor(): EasyEditorInstance | null {
+  return window.CKEDITOR?.instances?.[DESCRIPTION_EDITOR_ID] ?? null;
+}
+
+// Inserts at the caret through the editor's own model, mirroring how Easy8's
+// DynamicTokens plugin inserts its tokens. Appending to the end is kept as a
+// fallback for the window before the editor has finished mounting — losing the
+// caret position is a far better outcome than the click doing nothing.
 function insert(token: string): void {
-  emit("update:descriptionTemplate", `${props.descriptionTemplate}${tokenPlaceholder(token)}`);
+  const placeholder = tokenPlaceholder(token);
+  const editor = descriptionEditor();
+
+  if (!editor) {
+    emit("update:descriptionTemplate", `${props.descriptionTemplate}${placeholder}`);
+    return;
+  }
+
+  editor.model.change((writer) => {
+    const position = editor.model.document.selection.getFirstPosition();
+    if (!position) return;
+
+    writer.insertText(placeholder, position);
+    writer.setSelection(position.getShiftedBy(placeholder.length));
+  });
+
+  editor.editing.view.focus();
 }
 </script>
 
@@ -39,12 +77,15 @@ function insert(token: string): void {
     />
     <p class="caption">
       Use {{ tokenPlaceholder("token") }} to insert an answer — mapping a field straight to
-      Subject or Description fills its token in here automatically.
+      Subject or Description fills its token in here automatically. The subject is plain
+      text; only the description below supports formatting.
     </p>
 
     <DSTextarea
+      :id="DESCRIPTION_EDITOR_ID"
       :model-value="descriptionTemplate"
       label="Task description"
+      rich-editor
       :rows="8"
       @update:model-value="(v: string) => emit('update:descriptionTemplate', v)"
     />
@@ -64,7 +105,7 @@ function insert(token: string): void {
 
     <section class="efd-templates__preview">
       <h4>Preview</h4>
-      <pre>{{ preview }}</pre>
+      <div v-dompurify-html="preview" class="efd-templates__preview-body"></div>
     </section>
   </div>
 </template>
@@ -110,11 +151,12 @@ function insert(token: string): void {
       margin: 0 0 var(--Scale-Size-2, 8px);
       font-size: var(--Scale-FontSize-2, 12px);
     }
+  }
 
-    pre {
-      margin: 0;
-      white-space: pre-wrap;
-    }
+  &__preview-body {
+    // Matches how the created task renders it — block elements from the editor
+    // keep their own spacing, so no white-space override here.
+    word-break: break-word;
   }
 }
 </style>
