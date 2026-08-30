@@ -32,3 +32,38 @@ export interface BuilderContext {
   trackerId: number;
   attributesUrl: string;
 }
+
+/** The snake_case shape EasyFormDesignerFormsController#form_json returns —
+ * both embedded for initial hydration and as the update response body. */
+export interface ApiFormField {
+  id: number;
+  position: number;
+  label: string;
+  help_text: string | null;
+  token: string;
+  widget: Widget;
+  required: boolean;
+  mapped_attribute: string | null;
+  custom_field_id: number | null;
+}
+
+export interface ApiForm {
+  id: number;
+  subject_template: string | null;
+  description_template: string | null;
+  fields: ApiFormField[];
+}
+
+export function fieldFromApi(f: ApiFormField): FormField {
+  return {
+    id: f.id,
+    position: f.position,
+    label: f.label,
+    helpText: f.help_text,
+    token: f.token,
+    widget: f.widget,
+    required: f.required,
+    mappedAttribute: f.mapped_attribute,
+    customFieldId: f.custom_field_id,
+  };
+}

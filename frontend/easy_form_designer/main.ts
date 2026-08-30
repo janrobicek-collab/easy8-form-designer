@@ -1,6 +1,6 @@
 import { createApp } from "vue";
 import FormBuilder from "./FormBuilder.vue";
-import type { BuilderContext, CreateBuilderData } from "./types";
+import type { ApiForm, BuilderContext, CreateBuilderData } from "./types";
 
 /**
  * Mounts the form builder. Called from
@@ -18,5 +18,23 @@ export function createBuilderApp({ rootContainerId }: CreateBuilderData): void {
     attributesUrl: String(el.dataset.attributesUrl ?? ""),
   };
 
-  createApp(FormBuilder, { context }).mount(el);
+  // The saved fields/templates aren't otherwise reachable — without this the
+  // canvas always starts blank on load or refresh, no matter what is already
+  // in the database.
+  const initialForm = readInitialForm(el.dataset.initialId);
+
+  createApp(FormBuilder, { context, initialForm }).mount(el);
+}
+
+function readInitialForm(scriptId: string | undefined): ApiForm | null {
+  if (!scriptId) return null;
+
+  const node = document.getElementById(scriptId);
+  if (!node?.textContent) return null;
+
+  try {
+    return JSON.parse(node.textContent) as ApiForm;
+  } catch {
+    return null;
+  }
 }

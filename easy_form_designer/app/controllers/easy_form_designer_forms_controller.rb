@@ -5,6 +5,7 @@ class EasyFormDesignerFormsController < ApplicationController
   before_action :find_form, only: %i[show edit update destroy publish unpublish]
 
   helper :custom_fields
+  helper_method :form_json
 
   def index
     @forms = EasyFormDesigner::Form.visible(User.current).sorted.includes(:project, :tracker)
@@ -34,15 +35,29 @@ class EasyFormDesignerFormsController < ApplicationController
     end
   end
 
-
+  # The builder saves over JSON (fetch), never a classic HTML form post.
+  # Responding with JSON directly here — instead of the usual redirect — is
+  # not just a style choice: fetch() follows a same-origin redirect
+  # automatically and, per the Fetch spec, preserves the original method for
+  # anything other than POST. A PATCH here redirected to the `edit` GET-only
+  # route would have the browser silently re-issue the PATCH against it and
+  # 404 — reporting a spurious failure for a save that had already succeeded.
   def update
     @form.safe_attributes = form_params
+    saved = @form.save
+    @form.reload if saved
 
-    if @form.save
-      flash[:notice] = l(:notice_successful_update)
-      redirect_to edit_easy_form_designer_form_path(@form)
-    else
-      render :edit, status: :unprocessable_content
+    respond_to do |format|
+      if saved
+        format.html do
+          flash[:notice] = l(:notice_successful_update)
+          redirect_to edit_easy_form_designer_form_path(@form)
+        end
+        format.json { render json: form_json(@form) }
+      else
+        format.html { render :edit, status: :unprocessable_content }
+        format.json { render json: { errors: @form.errors.full_messages }, status: :unprocessable_content }
+      end
     end
   end
 
@@ -80,6 +95,32 @@ class EasyFormDesignerFormsController < ApplicationController
     params.require(:easy_form_designer_form).permit!
   rescue ActionController::ParameterMissing
     {}
+  end
+
+  # Shape consumed by the Vue builder — both to hydrate on initial page load
+  # (embedded into edit.html.erb) and to re-sync local state after a save
+  # (the JSON body of the update response), so the two never drift apart.
+  #
+  # @return [Hash]
+  def form_json(form)
+    {
+      id: form.id,
+      subject_template: form.subject_template,
+      description_template: form.description_template,
+      fields: form.fields.sorted.map do |field|
+        {
+          id: field.id,
+          position: field.position,
+          label: field.label,
+          help_text: field.help_text,
+          token: field.token,
+          widget: field.widget,
+          required: field.required,
+          mapped_attribute: field.mapped_attribute,
+          custom_field_id: field.custom_field_id,
+        }
+      end,
+    }
   end
 
 end

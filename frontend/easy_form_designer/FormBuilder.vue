@@ -6,17 +6,23 @@ import FieldCanvas from "./components/FieldCanvas.vue";
 import FieldConfig from "./components/FieldConfig.vue";
 import TemplateEditor from "./components/TemplateEditor.vue";
 import { useMappingOptions } from "./composables/useMappingOptions";
-import type { BuilderContext, FormField, Widget } from "./types";
+import type { ApiForm, BuilderContext, FormField, Widget } from "./types";
+import { fieldFromApi } from "./types";
 
-const props = defineProps<{ context: BuilderContext }>();
+const props = defineProps<{ context: BuilderContext; initialForm: ApiForm | null }>();
 
-const fields = ref<FormField[]>([]);
+// Hydrated from JSON the ERB view embeds (see edit.html.erb) — without this
+// the canvas always starts blank on load or refresh, regardless of what is
+// already saved, because there is no other path that tells the Vue app what
+// already exists in the database.
+const fields = ref<FormField[]>(props.initialForm?.fields.map(fieldFromApi) ?? []);
 const selectedToken = ref<string | null>(null);
-const subjectTemplate = ref("");
-const descriptionTemplate = ref("");
+const subjectTemplate = ref(props.initialForm?.subject_template ?? "");
+const descriptionTemplate = ref(props.initialForm?.description_template ?? "");
 const activeTab = ref("fields");
 const saving = ref(false);
 const saveError = ref<string | null>(null);
+const savedJustNow = ref(false);
 
 const { options, loading, load } = useMappingOptions(props.context);
 
@@ -48,7 +54,15 @@ function tokenFor(label: string): string {
   return candidate;
 }
 
+// Any further edit invalidates the "Saved." banner from a previous save —
+// otherwise it would keep claiming changes are saved that aren't yet.
+function markDirty(): void {
+  savedJustNow.value = false;
+}
+
 function addField(widget: Widget): void {
+  markDirty();
+
   const label = "Untitled field";
   const field: FormField = {
     position: fields.value.length + 1,
@@ -66,6 +80,8 @@ function addField(widget: Widget): void {
 }
 
 function updateField(updated: FormField): void {
+  markDirty();
+
   const index = fields.value.findIndex((f) => f.token === selectedToken.value);
   if (index === -1) return;
 
@@ -74,8 +90,20 @@ function updateField(updated: FormField): void {
 }
 
 function removeField(field: FormField): void {
+  markDirty();
+
   fields.value = fields.value.filter((f) => f.token !== field.token);
   if (selectedToken.value === field.token) selectedToken.value = null;
+}
+
+function updateSubjectTemplate(value: string): void {
+  markDirty();
+  subjectTemplate.value = value;
+}
+
+function updateDescriptionTemplate(value: string): void {
+  markDirty();
+  descriptionTemplate.value = value;
 }
 
 function csrfToken(): string {
@@ -85,11 +113,19 @@ function csrfToken(): string {
 async function save(): Promise<void> {
   saving.value = true;
   saveError.value = null;
+  savedJustNow.value = false;
 
   try {
     const response = await fetch(`/form-designer/forms/${props.context.formId}`, {
       method: "PATCH",
       credentials: "same-origin",
+      // The controller answers this exact request with JSON directly, with
+      // no redirect — deliberately. fetch() follows a same-origin redirect
+      // automatically, and per the Fetch spec only downgrades POST to GET
+      // on 301/302/303; a PATCH stays a PATCH. Redirecting to the (GET-only)
+      // edit page would make the browser silently retry this same PATCH
+      // against it and 404 — reporting a spurious failure for a save that
+      // had already succeeded server-side.
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -114,8 +150,18 @@ async function save(): Promise<void> {
       }),
     });
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    window.location.reload();
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.errors?.join(", ") || `HTTP ${response.status}`);
+    }
+
+    // Re-sync from the server's own view of what was just saved — picks up
+    // real ids for newly created fields — rather than a full page reload.
+    const saved = (await response.json()) as ApiForm;
+    fields.value = saved.fields.map(fieldFromApi);
+    subjectTemplate.value = saved.subject_template ?? "";
+    descriptionTemplate.value = saved.description_template ?? "";
+    savedJustNow.value = true;
   } catch (e) {
     saveError.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -134,6 +180,7 @@ async function save(): Promise<void> {
       :body="`${unmappedCount} field(s) are not mapped to a task attribute. The form cannot be published until every field is mapped.`"
     />
     <DSAlert v-if="saveError" variant="error" :body="saveError" />
+    <DSAlert v-if="savedJustNow" variant="success" body="Saved." />
 
     <div v-if="activeTab === 'fields'" class="efd-builder__panels">
       <FieldPalette @add="addField" />
@@ -155,9 +202,11 @@ async function save(): Promise<void> {
 
     <TemplateEditor
       v-else
-      v-model:subject-template="subjectTemplate"
-      v-model:description-template="descriptionTemplate"
+      :subject-template="subjectTemplate"
+      :description-template="descriptionTemplate"
       :fields="fields"
+      @update:subject-template="updateSubjectTemplate"
+      @update:description-template="updateDescriptionTemplate"
     />
 
     <footer class="efd-builder__footer">

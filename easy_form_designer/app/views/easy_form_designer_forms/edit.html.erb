@@ -30,7 +30,15 @@
      data-form-id="<%= @form.id %>"
      data-project-id="<%= @form.project_id %>"
      data-tracker-id="<%= @form.tracker_id %>"
-     data-attributes-url="<%= easy_form_designer_attributes_path %>"></div>
+     data-attributes-url="<%= easy_form_designer_attributes_path %>"
+     data-initial-id="app-easy-form-designer-initial"></div>
+
+<%# Existing fields/templates for the builder to hydrate from on mount —
+    without this the canvas always starts blank, even for a form that
+    already has saved fields, because the Vue app has no other way to know
+    what is already in the database. json_escape neutralises "</script>"
+    inside any saved label/help text so it can't break out of the tag. %>
+<script type="application/json" id="app-easy-form-designer-initial"><%= raw json_escape(form_json(@form).to_json) %></script>
 
 <script defer>
   EASY.schedule.late(() => {
