@@ -69,11 +69,31 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Rewrites every "{{ oldToken }}" in a template to the new token, tolerant
-// of the same whitespace padding TemplateCompiler accepts server-side.
+// Every "{{ token }}" occurrence in a template, tolerant of the same
+// whitespace padding TemplateCompiler accepts server-side. The brace
+// delimiters bound the match exactly, so a token that happens to be a
+// substring of another (e.g. "email" inside "email_address") can't match
+// by accident — nothing but the token's own characters is allowed between
+// the braces.
+function tokenPattern(token: string): RegExp {
+  return new RegExp(`\\{\\{\\s*${escapeRegExp(token)}\\s*\\}\\}`, "g");
+}
+
+// Rewrites every occurrence of oldToken to the new token — used when a
+// field is renamed (its token changes to match).
 function renameTokenInTemplate(template: string, oldToken: string, newToken: string): string {
-  const pattern = new RegExp(`\\{\\{\\s*${escapeRegExp(oldToken)}\\s*\\}\\}`, "g");
-  return template.replace(pattern, tokenPlaceholder(newToken));
+  return template.replace(tokenPattern(oldToken), tokenPlaceholder(newToken));
+}
+
+// Strips every occurrence of a token entirely — used when its field is
+// removed. Left behind otherwise: TemplateCompiler raises UnknownToken for
+// any template referencing a field that no longer exists, so a deleted
+// field's dangling "{{ token }}" doesn't just look stale, it breaks every
+// future submission of the form until someone notices and edits it out by
+// hand. Surrounding literal text (e.g. a "Platform: " label) is left as-is
+// — only the placeholder itself is removed, matching the rename behavior.
+function removeTokenFromTemplate(template: string, token: string): string {
+  return template.replace(tokenPattern(token), "");
 }
 
 // Any further edit invalidates the "Saved." banner from a previous save —
@@ -159,6 +179,12 @@ function removeField(field: FormField): void {
   // A field that was already saved needs an explicit _destroy on the next
   // save — one that only ever existed client-side can simply be dropped.
   if (field.id != null) pendingDestroyIds.value.push(field.id);
+
+  // Clear the field's own token out of both templates — otherwise it's
+  // left behind as a dangling reference nothing on the form provides
+  // anymore (see removeTokenFromTemplate).
+  subjectTemplate.value = removeTokenFromTemplate(subjectTemplate.value, field.token);
+  descriptionTemplate.value = removeTokenFromTemplate(descriptionTemplate.value, field.token);
 
   fields.value = fields.value.filter((f) => f.token !== field.token);
   if (selectedToken.value === field.token) selectedToken.value = null;
