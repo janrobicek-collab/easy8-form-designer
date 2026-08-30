@@ -44,23 +44,34 @@
           <label for="field_<%= field.token %>">
             <%= field.label %><%= " *".html_safe if field.required? %>
           </label>
+          <%# include_blank is unconditional — a required field must still
+              start with nothing chosen. `include_blank: !field.required?`
+              here previously meant a required select had no blank option,
+              so the browser auto-selected the first real option (e.g.
+              "Low" priority) with no requester action at all: a silently
+              guessed answer, not a validated one. required: still applies
+              the native HTML — and our own — required check to the blank
+              option, so an unanswered required select is now caught rather
+              than defaulted. %>
           <%= select_tag name,
                         options_for_select(field.options, value),
-                        include_blank: !field.required?, required: field.required?,
+                        include_blank: true, required: field.required?,
                         id: "field_#{field.token}" %>
         </div>
       <% when "date" %>
         <%# DesignSystem::Components::Datepicker has no required: keyword at
             all (confirmed from its initialize signature) — passing one
-            raises ArgumentError unconditionally. Required-ness is still
-            enforced server-side by missing_required_fields regardless;
-            label: is kept so the component renders its own properly
-            associated <label>, so the required marker can only be added
-            alongside it, not inside it. %>
-        <%= ds_datepicker(name: name, value: value, label: field.label) %>
-        <% if field.required? %>
-          <p class="caption"><%= l("easy_form_designer.label_required") %></p>
-        <% end %>
+            raises ArgumentError unconditionally. label: is omitted and
+            replaced with a manual <label> so the required marker matches
+            every other field type's plain asterisk instead of a separate
+            "Required" line — Datepicker manages its own internal id/label
+            pairing regardless of whether label: is passed, so nothing is
+            lost by supplying our own here. Required-ness is still enforced
+            server-side by missing_required_fields regardless of this. %>
+        <label>
+          <%= field.label %><%= " *".html_safe if field.required? %>
+        </label>
+        <%= ds_datepicker(name: name, value: value, label: nil) %>
       <% else %>
         <%= ds_text_field(name: name, value: value, label: field.label,
                           required: field.required?) %>

@@ -39,14 +39,16 @@ RSpec.describe EasyFormDesigner::TemplateCompiler, logged: :admin do
 
   describe "#description" do
     it "resolves every token" do
-      expect(compiler.description).to eq("Who: John Snow\nWhen: #{I18n.l(Date.parse('2026-09-15'))}")
+      # A single "\n" in the authored template becomes a real CommonMark
+      # paragraph break ("\n\n") — see the note on TemplateCompiler#hard_wrap.
+      expect(compiler.description).to eq("Who: John Snow\n\nWhen: #{I18n.l(Date.parse('2026-09-15'))}")
     end
 
     context "when an answer is missing" do
       let(:answers) { { "who" => "John Snow" } }
 
       it "renders an empty string rather than the raw token" do
-        expect(compiler.description).to eq("Who: John Snow\nWhen: ")
+        expect(compiler.description).to eq("Who: John Snow\n\nWhen: ")
       end
     end
 

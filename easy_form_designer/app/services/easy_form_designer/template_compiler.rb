@@ -26,7 +26,7 @@ module EasyFormDesigner
 
     # @return [String]
     def description
-      compile(form.description_template, :description)
+      compile(hard_wrap(form.description_template), :description)
     end
 
     # Tokens referenced by a template that no field on the form provides.
@@ -53,6 +53,23 @@ module EasyFormDesigner
 
         display_value(token)
       end
+    end
+
+    # A single "\n" in the admin's template (one Enter key press) is stored
+    # correctly, but Redmine's CommonMark formatter treats a lone newline as
+    # a soft break — no visible line break at all in the rendered task,
+    # collapsing every authored line into one continuous sentence — unless
+    # the whole instance has `common_mark_enable_hardbreaks` turned on
+    # (Redmine::Configuration, not something this engine controls or should
+    # flip instance-wide just for its own output). A blank line (two
+    # newlines) is a real CommonMark paragraph break, which always renders
+    # visibly regardless of that setting, so every authored line break is
+    # promoted to one here — this is description-only; the subject line
+    # isn't markdown-rendered at all.
+    #
+    # @return [String]
+    def hard_wrap(template)
+      template.to_s.gsub(/\r\n/, "\n").gsub(/\n+/, "\n\n")
     end
 
     # @return [Boolean]

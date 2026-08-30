@@ -9,7 +9,6 @@ en:
     label_subject_template: "Task subject"
     label_description_template: "Task description"
     label_open_form: "Open"
-    label_required: "Required"
     button_continue: "Continue"
     status:
       draft: "Draft"
