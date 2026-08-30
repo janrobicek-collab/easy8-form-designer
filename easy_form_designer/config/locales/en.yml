@@ -15,6 +15,7 @@ en:
       published: "Published"
     error:
       unmapped_field: "Every field must be mapped to a task attribute before publishing."
+      duplicate_mapping: "Another field already maps to this attribute. Each field must map to a different attribute (Subject and Description are the only exceptions)."
       unknown_token: "Unknown token %{token} in the %{template} template."
       no_attributes: "No mappable attributes exist for this project and task type."
   # Permission labels are looked up at the top level by Redmine, not namespaced.

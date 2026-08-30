@@ -119,6 +119,89 @@ RSpec.describe EasyFormDesigner::FormField, logged: :admin do
 
       it { expect(field.options).to eq([%w[Windows Windows], %w[Linux Linux]]) }
     end
+
+    # Regression: enumeration-format custom fields keep their choices in a
+    # real CustomFieldEnumeration association, never in possible_values
+    # (always nil for this format) — reading possible_values directly
+    # silently produced zero options, so a Radio buttons field mapped to an
+    # enumeration custom field rendered with no inputs at all on the
+    # requester form, no error anywhere.
+    context "for a radio field mapped to an enumeration custom field" do
+      let_it_be(:enum_cf) do
+        create(:issue_custom_field, field_format: "enumeration",
+                                    is_for_all: false, projects: [project.id], trackers: [tracker])
+      end
+
+      let_it_be(:option_a) { CustomFieldEnumeration.create!(custom_field: enum_cf, name: "Alice", active: true) }
+      let_it_be(:option_b) { CustomFieldEnumeration.create!(custom_field: enum_cf, name: "Bob", active: true) }
+
+      subject(:field) do
+        create(:easy_form_designer_form_field, form: form, widget: "radio",
+                                               mapped_attribute: nil, custom_field: enum_cf)
+      end
+
+      it "resolves options from the enumeration association" do
+        expect(field.options).to eq([["Alice", option_a.id.to_s], ["Bob", option_b.id.to_s]])
+      end
+    end
+  end
+
+  describe "duplicate attribute mapping" do
+    context "when another field already maps to the same native attribute" do
+      # form.reload mirrors what genuinely happens between two real requests
+      # (the controller always re-finds the form fresh) — without it, this
+      # spec would be testing RSpec's in-memory object reuse, not the app.
+      before do
+        create(:easy_form_designer_form_field, :select_priority, form: form)
+        form.reload
+      end
+
+      subject(:field) { build(:easy_form_designer_form_field, :radio_priority, form: form) }
+
+      it { is_expected.not_to be_valid }
+    end
+
+    context "when another field already maps to the same custom field" do
+      let_it_be(:cf) do
+        create(:issue_custom_field, field_format: "string", is_for_all: false,
+                                    projects: [project.id], trackers: [tracker])
+      end
+
+      before do
+        create(:easy_form_designer_form_field, form: form, widget: "text",
+                                               mapped_attribute: nil, custom_field: cf)
+        form.reload
+      end
+
+      subject(:field) do
+        build(:easy_form_designer_form_field, form: form, widget: "text",
+                                              mapped_attribute: nil, custom_field: cf)
+      end
+
+      it { is_expected.not_to be_valid }
+    end
+
+    context "when two fields both map to subject" do
+      before { create(:easy_form_designer_form_field, form: form, widget: "text", mapped_attribute: "subject") }
+
+      subject(:field) { build(:easy_form_designer_form_field, form: form, widget: "text", mapped_attribute: "subject") }
+
+      # Subject and description are the deliberate exceptions — their
+      # compiled templates already win over a directly-mapped field, so
+      # "last one wins" natively isn't the same silent data-loss risk it
+      # would be for, say, two fields both mapped to Priority.
+      it { is_expected.to be_valid }
+    end
+
+    context "when two fields both map to description" do
+      before { create(:easy_form_designer_form_field, form: form, widget: "long_text", mapped_attribute: "description") }
+
+      subject(:field) do
+        build(:easy_form_designer_form_field, form: form, widget: "long_text", mapped_attribute: "description")
+      end
+
+      it { is_expected.to be_valid }
+    end
   end
 
   describe "the five widgets added for PRD M2" do

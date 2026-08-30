@@ -38,6 +38,7 @@ module EasyFormDesigner
 
     validate :exactly_one_mapping
     validate :custom_field_available_for_form
+    validate :attribute_not_already_mapped_by_another_field
 
     before_validation :default_token
 
@@ -69,7 +70,24 @@ module EasyFormDesigner
       return [] unless CHOICE_WIDGETS.include?(widget)
 
       if custom?
-        custom_field.possible_values.to_a.map { |v| [v, v] }
+        # possible_values_options, not the raw possible_values column —
+        # possible_values only holds anything for "list"/"bool" formats.
+        # "enumeration" (and "user") formats keep their choices in a real
+        # association (CustomFieldEnumeration records, Principal records)
+        # and possible_values is always nil for them; reading it directly
+        # silently produced zero options — a Radio buttons field mapped to
+        # an enumeration custom field rendered with no inputs at all, not
+        # an error. possible_values_options is the one format-aware entry
+        # point that handles every supported format correctly. `form` is
+        # passed as the scoping object because it responds to #project the
+        # way an Issue would, letting formats that scope by project (e.g.
+        # UserFormat) resolve the same way they would on a real issue.
+        #
+        # The return shape is not consistent across formats, so it has to be
+        # normalised here: ListFormat#possible_values_options returns flat
+        # values ("Windows", "Linux", ...), while EnumerationFormat and
+        # UserFormat return [label, value] pairs.
+        custom_field.possible_values_options(form).map { |option| option.is_a?(Array) ? option : [option, option] }
       else
         native_options
       end
@@ -119,6 +137,31 @@ module EasyFormDesigner
       return if available.map(&:id).include?(custom_field_id)
 
       errors.add(:custom_field_id, :invalid)
+    end
+
+    # Two fields writing the same attribute silently overwrite one another —
+    # IssueBuilder's native_attributes/custom_field_values hashes are keyed
+    # by attribute, so whichever field is processed last simply wins, with
+    # no error shown to the admin who built the form or the requester who
+    # filled it in. Subject and Description are the sole exceptions: their
+    # compiled templates already take precedence over a directly-mapped
+    # field (see IssueBuilder#build_issue), so a plain "last one wins" there
+    # isn't the same silent-data-loss risk it would be for, say, two fields
+    # both mapped to Priority.
+    def attribute_not_already_mapped_by_another_field
+      return if form.blank?
+      return if mapped_attribute.in?(%w[subject description])
+
+      siblings = form.fields.reject { |f| f == self }
+
+      conflict =
+        if custom_field_id.present?
+          siblings.any? { |f| f.custom_field_id == custom_field_id }
+        elsif mapped_attribute.present?
+          siblings.any? { |f| f.mapped_attribute == mapped_attribute }
+        end
+
+      errors.add(:base, I18n.t("easy_form_designer.error.duplicate_mapping")) if conflict
     end
 
   end

@@ -15,6 +15,7 @@ cs:
       published: "Publikováno"
     error:
       unmapped_field: "Před publikováním musí být každé pole namapováno na atribut úkolu."
+      duplicate_mapping: "Na tento atribut je již namapováno jiné pole. Každé pole musí být namapováno na jiný atribut (výjimkou jsou pouze Předmět a Popis)."
       unknown_token: "Neznámý token %{token} v šabloně %{template}."
       no_attributes: "Pro tento projekt a typ úkolu neexistují žádné mapovatelné atributy."
   permission_view_easy_forms: "Zobrazit formuláře"
