@@ -11,29 +11,51 @@ const props = defineProps<{
 
 const emit = defineEmits<{ update: [field: FormField] }>();
 
-/** Serialized so a native attribute and a custom field id can share one select. */
-const mappingValue = computed<string>(() => {
-  if (!props.field) return "";
-  if (props.field.customFieldId) return `custom_field:${props.field.customFieldId}`;
-  if (props.field.mappedAttribute) return `native:${props.field.mappedAttribute}`;
-  return "";
-});
+// DSSelect's v-model is the selected OPTION OBJECT itself, matched by
+// reference/value against the `options` array — not a plain string. Passing
+// a string here (as an earlier version of this file did) makes the select
+// silently unresponsive: nothing ever matches, and the object DSSelect emits
+// back on @update:model-value has no .split() method, so the handler throws.
+// A unique `value` per option is still needed for DSOptionList's internal
+// selection bookkeeping, so it's kept as the same "type:rawValue" string;
+// `type`/`rawValue` travel alongside it as plain extra keys on the option.
+interface SelectOption {
+  label: string;
+  value: string;
+  type: MappingOption["type"];
+  rawValue: MappingOption["value"];
+}
 
-const selectOptions = computed(() =>
-  props.options.map((o) => ({ label: o.label, value: `${o.type}:${o.value}` }))
+const selectOptions = computed<SelectOption[]>(() =>
+  props.options.map((o) => ({
+    label: o.label,
+    value: `${o.type}:${o.value}`,
+    type: o.type,
+    rawValue: o.value,
+  }))
 );
+
+const mappingValue = computed<SelectOption | null>(() => {
+  if (!props.field) return null;
+
+  return (
+    selectOptions.value.find((o) =>
+      props.field?.customFieldId
+        ? o.type === "custom_field" && o.rawValue === props.field.customFieldId
+        : o.type === "native" && o.rawValue === props.field?.mappedAttribute
+    ) ?? null
+  );
+});
 
 function patch(changes: Partial<FormField>): void {
   if (!props.field) return;
   emit("update", { ...props.field, ...changes });
 }
 
-function setMapping(raw: string): void {
-  const [type, value] = raw.split(":");
-
+function setMapping(option: SelectOption | null): void {
   patch({
-    mappedAttribute: type === "native" ? value : null,
-    customFieldId: type === "custom_field" ? Number(value) : null,
+    mappedAttribute: option?.type === "native" ? String(option.rawValue) : null,
+    customFieldId: option?.type === "custom_field" ? Number(option.rawValue) : null,
   });
 }
 </script>
@@ -66,14 +88,15 @@ function setMapping(raw: string): void {
          options would be empty anyway — the list comes from the mapped
          attribute, never from field-local config. -->
     <DSSelect
+      name="mapped_attribute"
       :model-value="mappingValue"
       :options="selectOptions"
       :loading="loading"
       label="Maps to"
       required
-      helper-text="Every field must write to a real task attribute."
-      @update:model-value="setMapping"
+      @update:model-value="(v) => setMapping(v as SelectOption | null)"
     />
+    <p class="caption">Every field must write to a real task attribute.</p>
 
     <p v-if="!loading && !options.length" class="efd-config__warning">
       No attributes of this type exist for the selected project and task type.
