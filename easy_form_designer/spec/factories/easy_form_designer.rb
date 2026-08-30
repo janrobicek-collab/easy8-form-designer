@@ -39,6 +39,35 @@ FactoryBot.define do
       mapped_attribute { "due_date" }
     end
 
+    trait :number_estimated do
+      widget { "number" }
+      mapped_attribute { "estimated_hours" }
+    end
+
+    trait :radio_priority do
+      widget { "radio" }
+      mapped_attribute { "priority_id" }
+    end
+
+    trait :user_assignee do
+      widget { "user" }
+      mapped_attribute { "assigned_to_id" }
+    end
+
+    # No native attribute is multi-valued or boolean today, so both are
+    # custom-field only — the caller supplies a matching custom_field:
+    # scoped to its own form's project + tracker, the same way every other
+    # custom-field-mapped spec in this suite already does.
+    trait :multi_select do
+      widget { "multi_select" }
+      mapped_attribute { nil }
+    end
+
+    trait :checkbox do
+      widget { "checkbox" }
+      mapped_attribute { nil }
+    end
+
     # Maps to a custom field instead of a native attribute.
     trait :custom do
       mapped_attribute { nil }

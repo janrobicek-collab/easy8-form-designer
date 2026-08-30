@@ -126,6 +126,86 @@ RSpec.describe EasyFormDesigner::IssueBuilder, logged: :admin do
       end
     end
 
+    context "with a checkbox field left unchecked" do
+      let_it_be(:bool_cf) do
+        create(:issue_custom_field, field_format: "bool", projects: [project.id], trackers: [tracker])
+      end
+
+      let(:form) do
+        create(:easy_form_designer_form, project: project, tracker: tracker, name: "Checkbox form")
+      end
+
+      let(:answers) { { "is_private" => "0" } }
+
+      before do
+        create(:easy_form_designer_form_field, form: form, label: "Private", token: "is_private",
+                                               widget: "checkbox", custom_field: bool_cf, mapped_attribute: nil)
+        form.reload
+        form.publish
+      end
+
+      # The bug this fixes: false.blank? is true in Rails, so a naive
+      # `next if value.blank?` guard treats "explicitly unchecked" identically
+      # to "never answered" and drops the attribute instead of setting it
+      # false. custom_field_value returns "0"/"1" (string) for a bool CF,
+      # never a real Ruby boolean — that's Redmine's own representation.
+      it "still writes false to the custom field rather than leaving it unset" do
+        issue = build_issue.issue.reload
+
+        expect(issue.custom_field_value(bool_cf)).to eq("0")
+      end
+    end
+
+    context "with a multi_select field" do
+      let_it_be(:multi_cf) do
+        create(:issue_custom_field, field_format: "list", multiple: true,
+                                    possible_values: %w[Windows macOS Linux],
+                                    projects: [project.id], trackers: [tracker])
+      end
+
+      let(:form) do
+        create(:easy_form_designer_form, project: project, tracker: tracker, name: "Multi-select form")
+      end
+
+      let(:answers) { { "platforms" => %w[Windows Linux] } }
+
+      before do
+        create(:easy_form_designer_form_field, form: form, label: "Platforms", token: "platforms",
+                                               widget: "multi_select", custom_field: multi_cf,
+                                               mapped_attribute: nil)
+        form.reload
+        form.publish
+      end
+
+      it "writes every selected value to the custom field" do
+        issue = build_issue.issue.reload
+
+        expect(issue.custom_field_value(multi_cf)).to match_array(%w[Windows Linux])
+      end
+    end
+
+    context "with a user-lookup field" do
+      let_it_be(:assignee) { create(:user) }
+      let_it_be(:membership) { create(:member, project: project, user: assignee) }
+
+      let(:form) do
+        create(:easy_form_designer_form, project: project, tracker: tracker, name: "Assignee form")
+      end
+
+      let(:answers) { { "assignee" => assignee.id.to_s } }
+
+      before do
+        create(:easy_form_designer_form_field, form: form, label: "Assignee", token: "assignee",
+                                               widget: "user", mapped_attribute: "assigned_to_id")
+        form.reload
+        form.publish
+      end
+
+      it "assigns the task to the selected principal" do
+        expect(build_issue.issue.assigned_to_id).to eq(assignee.id)
+      end
+    end
+
     context "when the issue is invalid" do
       before do
         allow_any_instance_of(Issue).to receive(:save).and_return(false)

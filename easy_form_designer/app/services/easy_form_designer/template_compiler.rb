@@ -108,10 +108,16 @@ module EasyFormDesigner
       return "" if raw.blank?
 
       case field&.widget
-      when "select"
+      when "select", "radio"
         label_for_option(field, raw)
+      when "multi_select"
+        Array(raw).filter_map { |v| label_for_option(field, v) }.join(", ")
       when "date"
         format_date(raw)
+      when "checkbox"
+        checkbox_label(raw)
+      when "user"
+        user_label(raw)
       else
         raw.to_s
       end
@@ -121,6 +127,20 @@ module EasyFormDesigner
     def label_for_option(field, raw)
       pair = field.options.detect { |(_label, value)| value.to_s == raw.to_s }
       pair ? pair.first.to_s : raw.to_s
+    end
+
+    # @return [String]
+    def checkbox_label(raw)
+      raw.to_s == "1" ? ::I18n.t(:general_text_yes_capitalize) : ::I18n.t(:general_text_no_capitalize)
+    end
+
+    # A submitted user-lookup answer is a Principal id, not a value already
+    # present on the field — Principal, not User, because assigned_to accepts
+    # groups too.
+    #
+    # @return [String]
+    def user_label(raw)
+      Principal.find_by(id: raw)&.name || raw.to_s
     end
 
     # @return [String]

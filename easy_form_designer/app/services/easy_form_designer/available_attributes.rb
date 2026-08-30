@@ -10,25 +10,43 @@ module EasyFormDesigner
   class AvailableAttributes
     # Formats that cannot be driven from a form field. Mirrors
     # EasyIssueTemplate::UNSUPPORTED_CF_FORMATS, minus "user": a user lookup is
-    # an explicit PRD M2 requirement, so it is excluded here only because the
-    # first slice has no user widget yet — revisit when M2 widens.
-    UNSUPPORTED_CF_FORMATS = %w[easy_computed_token autoincrement user version].freeze
+    # an explicit PRD M2 requirement, now built — see the "user" widget below.
+    UNSUPPORTED_CF_FORMATS = %w[easy_computed_token autoincrement version].freeze
 
-    # Which widget may drive which native attribute.
+    # Which widget may drive which native attribute. Assignee is offered only
+    # under "user" (a searchable lookup), not "select" (a plain dropdown of
+    # every assignable user) — the whole point of adding the richer widget.
     NATIVE_BY_WIDGET = {
       "text" => %w[subject],
       "long_text" => %w[description],
-      "select" => %w[priority_id assigned_to_id],
+      "select" => %w[priority_id],
       "date" => %w[due_date start_date],
+      "number" => %w[estimated_hours],
+      "radio" => %w[priority_id],
+      "user" => %w[assigned_to_id],
     }.freeze
 
-    # Which widget may drive which custom-field format.
+    # Which widget may drive which custom-field format. "multi_select" and
+    # "checkbox" have no native counterpart today (no native attribute is
+    # multi-valued or boolean), so they're custom-field only — the absent key
+    # in NATIVE_BY_WIDGET above already yields that via #fetch(widget, []).
     CF_FORMATS_BY_WIDGET = {
       "text" => %w[string link int float],
       "long_text" => %w[text],
       "select" => %w[list enumeration bool],
       "date" => %w[date],
+      "number" => %w[int float],
+      "radio" => %w[list enumeration bool],
+      "multi_select" => %w[list enumeration user],
+      "checkbox" => %w[bool],
+      "user" => %w[user],
     }.freeze
+
+    # Widgets whose underlying custom field must have multiple: true. Every
+    # other widget requires multiple: false — a single-value widget can't
+    # offer more than one selection, and a multi-value field mapped there
+    # would silently lose all but one submitted value.
+    MULTI_WIDGETS = %w[multi_select].freeze
 
     attr_reader :project, :tracker
 
@@ -96,7 +114,9 @@ module EasyFormDesigner
 
     # @return [Boolean]
     def compatible_format?(widget, custom_field)
-      CF_FORMATS_BY_WIDGET.fetch(widget, []).include?(custom_field.field_format)
+      return false unless CF_FORMATS_BY_WIDGET.fetch(widget, []).include?(custom_field.field_format)
+
+      MULTI_WIDGETS.include?(widget) == custom_field.multiple?
     end
 
     # @return [String]
@@ -108,6 +128,7 @@ module EasyFormDesigner
       when "assigned_to_id" then l(:field_assigned_to)
       when "due_date" then l(:field_due_date)
       when "start_date" then l(:field_start_date)
+      when "estimated_hours" then l(:field_estimated_hours)
       else name.humanize
       end
     end

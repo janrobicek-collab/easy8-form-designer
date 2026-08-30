@@ -9,6 +9,11 @@ const LABELS: Record<Widget, string> = {
   long_text: "Long text",
   select: "Dropdown",
   date: "Date",
+  number: "Number",
+  radio: "Radio buttons",
+  multi_select: "Multi-select",
+  checkbox: "Checkbox",
+  user: "User lookup",
 };
 </script>
 

@@ -96,5 +96,48 @@ RSpec.describe EasyFormDesigner::FormField, logged: :admin do
     context "for a non-select widget" do
       it { expect(field.options).to eq([]) }
     end
+
+    context "for a radio field mapped to priority" do
+      subject(:field) { build(:easy_form_designer_form_field, :radio_priority, form: form) }
+
+      it "resolves the same way select does" do
+        expect(field.options).to eq(IssuePriority.active.map { |p| [p.name, p.id.to_s] })
+      end
+    end
+
+    context "for a multi_select mapped to a list custom field" do
+      let_it_be(:list_cf) do
+        create(:issue_custom_field, field_format: "list", multiple: true,
+                                    possible_values: %w[Windows Linux],
+                                    is_for_all: false, projects: [project.id], trackers: [tracker])
+      end
+
+      subject(:field) do
+        create(:easy_form_designer_form_field, form: form, widget: "multi_select",
+                                               mapped_attribute: nil, custom_field: list_cf)
+      end
+
+      it { expect(field.options).to eq([%w[Windows Windows], %w[Linux Linux]]) }
+    end
+  end
+
+  describe "the five widgets added for PRD M2" do
+    %i[number_estimated radio_priority user_assignee].each do |trait|
+      it "#{trait} is a valid native mapping" do
+        expect(build(:easy_form_designer_form_field, trait, form: form)).to be_valid
+      end
+    end
+
+    {
+      multi_select: { field_format: "list", multiple: true, possible_values: %w[a b] },
+      checkbox: { field_format: "bool" },
+    }.each do |trait, cf_attrs|
+      it "#{trait} is a valid custom-field mapping" do
+        cf = create(:issue_custom_field, is_for_all: false, projects: [project.id],
+                                         trackers: [tracker], **cf_attrs)
+
+        expect(build(:easy_form_designer_form_field, trait, form: form, custom_field: cf)).to be_valid
+      end
+    end
   end
 end

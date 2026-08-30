@@ -93,21 +93,34 @@ module EasyFormDesigner
     # @return [Hash{String => Object}]
     def native_attributes
       @native_attributes ||= form.fields.select(&:native?).each_with_object({}) do |field, acc|
-        value = answers[field.token]
-        next if value.blank?
+        next unless answerable?(field)
 
-        acc[field.mapped_attribute] = value
+        acc[field.mapped_attribute] = answers[field.token]
       end
     end
 
     # @return [Hash{Integer => Object}]
     def custom_field_values
       @custom_field_values ||= form.fields.select(&:custom?).each_with_object({}) do |field, acc|
-        value = answers[field.token]
-        next if value.blank?
+        next unless answerable?(field)
 
-        acc[field.custom_field_id] = value
+        acc[field.custom_field_id] = answers[field.token]
       end
+    end
+
+    # A checkbox left unchecked ("0") is a deliberate "no" answer, not a
+    # missing one — false.blank? is true in Rails, so the generic blank-skip
+    # below would otherwise treat "unchecked" identically to "never answered"
+    # and silently drop the attribute instead of setting it false. The raw
+    # "0"/"1" string is passed straight through either way: that is Redmine's
+    # own storage representation for a bool-format custom field, matching
+    # what TemplateCompiler already assumes when rendering it.
+    #
+    # @return [Boolean]
+    def answerable?(field)
+      return true if field.widget == "checkbox"
+
+      answers[field.token].present?
     end
 
   end

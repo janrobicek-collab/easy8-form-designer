@@ -5,6 +5,8 @@ class EasyFormDesignerSubmissionsController < ApplicationController
   before_action :find_form
   before_action :authorize_submission
 
+  helper_method :existing_principal_value
+
   def show
     @submission = @form.submissions.find(params[:submission_id])
   end
@@ -55,7 +57,34 @@ class EasyFormDesignerSubmissionsController < ApplicationController
 
   # @return [Array<EasyFormDesigner::FormField>]
   def missing_required_fields
-    @form.fields.select { |f| f.required? && @answers[f.token].blank? }
+    @form.fields.select { |f| f.required? && missing?(f) }
+  end
+
+  # A checkbox always submits a value ("1" or "0"), so it is never blank —
+  # "required" on a checkbox has to mean "must be checked", the ordinary
+  # meaning of a required consent/confirmation box, not merely "answered".
+  #
+  # @return [Boolean]
+  def missing?(field)
+    return @answers[field.token] != "1" if field.widget == "checkbox"
+
+    @answers[field.token].blank?
+  end
+
+  # Resolves a stored user-lookup answer (a Principal id) back to the
+  # {value:, label:} shape DesignSystem::Components::Autocomplete expects for
+  # its value: — only relevant when re-rendering the form after a validation
+  # error, since a fresh form has no answer yet.
+  #
+  # @param id [String, Integer, nil]
+  # @return [Hash, nil]
+  def existing_principal_value(id)
+    return nil if id.blank?
+
+    principal = Principal.find_by(id: id)
+    return nil unless principal
+
+    { value: principal.id.to_s, label: principal.name }
   end
 
 end

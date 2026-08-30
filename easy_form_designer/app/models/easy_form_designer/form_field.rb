@@ -7,11 +7,17 @@ module EasyFormDesigner
   # choice options are derived from the mapped attribute rather than authored
   # here, so an unmapped field has nothing to render.
   class FormField < EasyFormDesigner::ApplicationRecord
-    # Widget types supported by the first slice. Widening this list is PRD M2.
-    WIDGETS = %w[text long_text select date].freeze
+    # Widget types supported so far. PRD M2's full set.
+    WIDGETS = %w[text long_text select date number radio multi_select checkbox user].freeze
+
+    # Widgets whose choices are label/value pairs resolved from the mapped
+    # attribute (a custom field's possible_values, or a hardcoded native
+    # list) — see #options.
+    CHOICE_WIDGETS = %w[select radio multi_select].freeze
 
     # Native issue attributes a field may map to.
-    NATIVE_ATTRIBUTES = %w[subject description priority_id assigned_to_id due_date start_date].freeze
+    NATIVE_ATTRIBUTES = %w[subject description priority_id assigned_to_id due_date start_date
+                           estimated_hours].freeze
 
     belongs_to :form,
                class_name: "EasyFormDesigner::Form",
@@ -54,12 +60,13 @@ module EasyFormDesigner
       custom_field_id.present?
     end
 
-    # Choice options for select-style widgets, read from whatever the field is
-    # mapped to. Never authored on the field itself.
+    # Choice options for select-style widgets (dropdown, radio, multi-select),
+    # read from whatever the field is mapped to. Never authored on the field
+    # itself.
     #
     # @return [Array<Array(String, String)>] label/value pairs
     def options
-      return [] unless widget == "select"
+      return [] unless CHOICE_WIDGETS.include?(widget)
 
       if custom?
         custom_field.possible_values.to_a.map { |v| [v, v] }

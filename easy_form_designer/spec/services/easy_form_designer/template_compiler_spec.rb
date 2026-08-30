@@ -166,6 +166,120 @@ RSpec.describe EasyFormDesigner::TemplateCompiler, logged: :admin do
     end
   end
 
+  describe "radio fields" do
+    let(:form) do
+      create(:easy_form_designer_form,
+             project: project, tracker: tracker,
+             description_template: "Priority: {{ priority }}")
+    end
+
+    let_it_be(:priority) { create(:issue_priority) }
+
+    let(:answers) { { "priority" => priority.id.to_s } }
+
+    before do
+      create(:easy_form_designer_form_field, form: form, label: "Priority", token: "priority",
+                                             widget: "radio", mapped_attribute: "priority_id")
+      form.reload
+    end
+
+    it "resolves the same way select does" do
+      expect(compiler.description).to eq("Priority: #{priority.name}")
+    end
+  end
+
+  describe "multi_select fields" do
+    let_it_be(:list_cf) do
+      create(:issue_custom_field, field_format: "list", multiple: true,
+                                  possible_values: %w[Windows Linux macOS],
+                                  projects: [project.id], trackers: [tracker])
+    end
+
+    let(:form) do
+      create(:easy_form_designer_form,
+             project: project, tracker: tracker,
+             description_template: "Platforms: {{ platforms }}")
+    end
+
+    before do
+      create(:easy_form_designer_form_field, form: form, label: "Platforms", token: "platforms",
+                                             widget: "multi_select", custom_field: list_cf,
+                                             mapped_attribute: nil)
+      form.reload
+    end
+
+    context "with multiple values selected" do
+      let(:answers) { { "platforms" => %w[Windows macOS] } }
+
+      it "joins the human labels" do
+        expect(compiler.description).to eq("Platforms: Windows, macOS")
+      end
+    end
+
+    context "with nothing selected" do
+      let(:answers) { { "platforms" => [] } }
+
+      it "renders an empty string" do
+        expect(compiler.description).to eq("Platforms: ")
+      end
+    end
+  end
+
+  describe "checkbox fields" do
+    let(:form) do
+      create(:easy_form_designer_form,
+             project: project, tracker: tracker,
+             description_template: "Private: {{ is_private }}")
+    end
+
+    before do
+      create(:easy_form_designer_form_field, form: form, label: "Private", token: "is_private",
+                                             widget: "checkbox",
+                                             custom_field: create(:issue_custom_field, field_format: "bool",
+                                                                                       projects: [project.id],
+                                                                                       trackers: [tracker]),
+                                             mapped_attribute: nil)
+      form.reload
+    end
+
+    context "when checked" do
+      let(:answers) { { "is_private" => "1" } }
+
+      it { expect(compiler.description).to eq("Private: Yes") }
+    end
+
+    context "when unchecked" do
+      let(:answers) { { "is_private" => "0" } }
+
+      # An explicit "no" answer must render as "No" — the whole point of this
+      # widget existing is to distinguish "unchecked" from "unanswered", and a
+      # blank render here would erase that distinction right back out.
+      it { expect(compiler.description).to eq("Private: No") }
+    end
+  end
+
+  describe "user fields" do
+    let_it_be(:member) { create(:user) }
+
+    let(:form) do
+      create(:easy_form_designer_form,
+             project: project, tracker: tracker,
+             description_template: "Assignee: {{ assignee }}")
+    end
+
+    let(:answers) { { "assignee" => member.id.to_s } }
+
+    before do
+      create(:easy_form_designer_form_field, form: form, label: "Assignee", token: "assignee",
+                                             widget: "user", mapped_attribute: "assigned_to_id")
+      form.reload
+    end
+
+    it "resolves the id to the principal's name" do
+      expect(compiler.description).to eq("Assignee: #{member.name}")
+    end
+  end
+
   describe ".unknown_tokens" do
     it "lists template tokens no field provides" do
       expect(described_class.unknown_tokens(form, "{{ who }} and {{ nope }}")).to eq(["nope"])

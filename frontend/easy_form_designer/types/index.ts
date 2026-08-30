@@ -3,7 +3,17 @@ export interface CreateBuilderData {
 }
 
 /** Widget types supported by the first slice. Mirrors FormField::WIDGETS. */
-export const WIDGETS = ["text", "long_text", "select", "date"] as const;
+export const WIDGETS = [
+  "text",
+  "long_text",
+  "select",
+  "date",
+  "number",
+  "radio",
+  "multi_select",
+  "checkbox",
+  "user",
+] as const;
 export type Widget = (typeof WIDGETS)[number];
 
 /** One option in the "Maps to" dropdown, served by AvailableAttributes. */

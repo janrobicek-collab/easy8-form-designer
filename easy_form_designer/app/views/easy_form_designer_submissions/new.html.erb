@@ -58,6 +58,79 @@
                         include_blank: true, required: field.required?,
                         id: "field_#{field.token}" %>
         </div>
+      <% when "number" %>
+        <%# min: 0 only for the one native attribute with a known-safe floor
+            (estimated hours can't be negative). No general min/max authoring
+            here — a per-field author-configured range is M7, not this
+            slice. %>
+        <%= ds_number_field(name: name, value: value, label: field.label,
+                            required: field.required?,
+                            min: (0 if field.mapped_attribute == "estimated_hours")) %>
+      <% when "radio" %>
+        <%# Plain radio_button_tag, not ds_radio_group — DSRadioGroup's
+            "options" prop never hydrates from the server-rendered
+            <script type="application/json"> prop tag outside the SPA
+            mount context (confirmed live: Vue logs "Missing required
+            prop: options" and the fieldset renders with no inputs at
+            all), the same class of standalone-mount limitation already
+            documented above for <easy8-ds-select>. %>
+        <fieldset class="form-group">
+          <legend><%= field.label %><%= " *".html_safe if field.required? %></legend>
+          <% field.options.each do |option_label, option_value| %>
+            <label>
+              <%= radio_button_tag name, option_value, value == option_value,
+                                   required: field.required? %>
+              <%= option_label %>
+            </label>
+          <% end %>
+        </fieldset>
+      <% when "multi_select" %>
+        <%# Same reasoning as the "select" case above: a multi-value select
+            has the identical <easy8-ds-select> mount bug, so it inherits the
+            identical plain select_tag fallback — here with multiple: true
+            and an array-shaped param name. %>
+        <div class="form-group">
+          <label for="field_<%= field.token %>">
+            <%= field.label %><%= " *".html_safe if field.required? %>
+          </label>
+          <%= select_tag "#{name}[]",
+                        options_for_select(field.options, Array(value)),
+                        multiple: true, required: field.required?,
+                        id: "field_#{field.token}" %>
+        </div>
+      <% when "checkbox" %>
+        <%# Plain check_box_tag, not DesignSystem::Components::Checkbox —
+            its "option" prop has the same standalone-mount hydration
+            failure described above for RadioGroup (confirmed live: Vue
+            logs "Missing required prop: option" and nothing renders).
+            hidden_field_tag first is the standard Rails idiom so an
+            unchecked box still submits "0" rather than nothing at all —
+            without it, missing?/answerable? below would see no param and
+            treat "explicitly unchecked" as "never answered" again, the
+            exact bug this widget exists to fix. %>
+        <%# id: nil — hidden_field_tag and check_box_tag otherwise both
+            default their id from the same name, which is invalid HTML
+            (duplicate ids) and made Playwright resolve the wrong element
+            during verification. %>
+        <%= hidden_field_tag name, "0", id: nil %>
+        <label>
+          <%= check_box_tag name, "1", value == "1" %>
+          <%= field.label %><%= " *".html_safe if field.required? %>
+        </label>
+      <% when "user" %>
+        <%# No bare ds_autocomplete helper exists in core, so the component is
+            called directly — same reasoning as Checkbox above. Scoped to this
+            form's own project via collection_args, the same mechanism core
+            itself uses to scope a principal autocomplete to one project's
+            members rather than the whole instance. %>
+        <%= DesignSystem::Components::Autocomplete.render(
+              view_context: self, entity: "principal", name: name,
+              label: field.label, required: field.required?,
+              clearable: !field.required?,
+              settings: { collection: "visible_active_users",
+                          collection_args: { project_id: @form.project.id } },
+              value: existing_principal_value(value)
+            ) %>
       <% when "date" %>
         <%# DesignSystem::Components::Datepicker has no required: keyword at
             all (confirmed from its initialize signature) — passing one

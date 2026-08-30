@@ -72,9 +72,19 @@ const widgetHint = computed<string | null>(() => {
     case "long_text":
       return "A Long text field maps to Description or a matching custom field.";
     case "select":
-      return "A Dropdown field maps to Priority, Assignee, or a matching custom field.";
+      return "A Dropdown field maps to Priority or a matching custom field.";
     case "date":
       return "A Date field maps to Due date, Start date, or a matching custom field.";
+    case "number":
+      return "A Number field maps to Estimated time or a matching custom field.";
+    case "radio":
+      return "A Radio buttons field maps to Priority or a matching custom field.";
+    case "multi_select":
+      return "A Multi-select field maps to a matching custom field only — no native attribute takes multiple values.";
+    case "checkbox":
+      return "A Checkbox field maps to a matching custom field only — no native attribute is boolean today.";
+    case "user":
+      return "A User lookup field maps to Assignee or a matching custom field.";
     default:
       return null;
   }
