@@ -34,6 +34,9 @@ export const WIDGETS = [
 ] as const;
 export type Widget = (typeof WIDGETS)[number];
 
+/** What a freshly-added field starts as, before the author picks a real type. */
+export const DEFAULT_WIDGET: Widget = "text";
+
 /**
  * PRD M13. The one widget whose answer is uploaded files rather than a
  * value — so it takes no format rule, no bounds, and no preset (there is no
@@ -120,13 +123,19 @@ export const RANGE_OPERATORS: readonly string[] = ["><"];
 export const DATE_FILTER_TYPES: readonly string[] = ["date_period", "date"];
 
 /**
- * PRD M11 — a named group of fields, optionally gated by a rule.
+ * PRD M11 / REQ-16 — a named group of fields, gated by an optional rule.
  *
  * `id` is a number once saved, but a brand-new section carries a temporary
  * string key instead ("new-1") because its real id doesn't exist until the
  * save that creates it — fields assigned to it reference that key, and the
  * controller swaps in the real id server-side (see
  * EasyFormDesignerFormsController#section_params_resolved).
+ *
+ * REQ-16 made a section OWN its fields directly (`fields` below) rather than
+ * each field separately carrying a `sectionId` back-reference — membership is
+ * now which section's array a field lives in, which is also what makes
+ * `vuedraggable`'s cross-list drag (moving a field between sections) a plain
+ * array splice with nothing left to fall out of sync afterward.
  */
 export interface FormSection {
   id: number | string;
@@ -140,6 +149,9 @@ export interface FormSection {
   // need none. Stored as JSON server-side, as EasyAutomations::Condition
   // stores its own.
   visibilityValues: string[];
+  fields: FormField[];
+  // Client-only view state — never sent to or read from the server.
+  collapsed: boolean;
   _destroy?: boolean;
 }
 
@@ -174,9 +186,6 @@ export interface FormField {
   hidden: boolean;
   presetValue: string | string[] | null;
   presetOffsetDays: number | null;
-  // PRD M11. Null means top-level / ungrouped. A string value is a
-  // not-yet-saved section's temporary key — see FormSection above.
-  sectionId: number | string | null;
   _destroy?: boolean;
 }
 
@@ -210,7 +219,9 @@ export interface ApiFormField {
   hidden: boolean;
   preset_value: string | string[] | null;
   preset_offset_days: number | null;
-  section_id: number | null;
+  // REQ-16 — non-nullable. Every field belongs to a section, enforced at
+  // the DB level (easy_form_designer_form_fields.section_id NOT NULL).
+  section_id: number;
 }
 
 export interface ApiFormSection {
@@ -260,11 +271,10 @@ export function fieldFromApi(f: ApiFormField): FormField {
     hidden: f.hidden,
     presetValue: f.preset_value,
     presetOffsetDays: f.preset_offset_days,
-    sectionId: f.section_id,
   };
 }
 
-export function sectionFromApi(s: ApiFormSection): FormSection {
+function sectionFromApi(s: ApiFormSection): Omit<FormSection, "fields"> {
   return {
     id: s.id,
     position: s.position,
@@ -273,5 +283,33 @@ export function sectionFromApi(s: ApiFormSection): FormSection {
     visibilityFieldId: s.visibility_field_id,
     visibilityOperator: s.visibility_operator,
     visibilityValues: s.visibility_values ?? [],
+    collapsed: false,
   };
+}
+
+/**
+ * REQ-16. The whole point of grouping a form: every field is nested under
+ * the section object it belongs to, sorted the same way the server renders
+ * it — sections in their own position order, each section's fields in
+ * theirs. There is no longer a flat field list anywhere in the builder.
+ */
+export function sectionsFromApi(form: ApiForm): FormSection[] {
+  const bySectionId = new Map<number, FormField[]>();
+
+  form.fields
+    .slice()
+    .sort((a, b) => a.position - b.position)
+    .forEach((apiField) => {
+      const list = bySectionId.get(apiField.section_id) ?? [];
+      list.push(fieldFromApi(apiField));
+      bySectionId.set(apiField.section_id, list);
+    });
+
+  return form.sections
+    .slice()
+    .sort((a, b) => a.position - b.position)
+    .map((apiSection) => ({
+      ...sectionFromApi(apiSection),
+      fields: bySectionId.get(apiSection.id) ?? [],
+    }));
 }

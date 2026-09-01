@@ -1,4 +1,5 @@
 import { createApp } from "vue";
+import { createPinia } from "pinia";
 import VueDOMPurifyHTML from "vue-dompurify-html";
 import FormBuilder from "./FormBuilder.vue";
 import type { ApiForm, BuilderContext, CreateBuilderData } from "./types";
@@ -26,6 +27,11 @@ export function createBuilderApp({ rootContainerId }: CreateBuilderData): void {
   const initialForm = readInitialForm(el.dataset.initialId);
 
   const app = createApp(FormBuilder, { context, initialForm });
+
+  // REQ-17. The store now owns sections/fields (formBuilderStore.ts) instead
+  // of FormBuilder.vue holding them in local refs and drilling them through
+  // props/emits down five component layers.
+  app.use(createPinia());
 
   // Powers v-dompurify-html in TemplateEditor.vue, which renders the
   // description template as HTML for the live preview. Registered the same way
