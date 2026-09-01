@@ -1,8 +1,13 @@
 <%# Requester-facing form. Server-rendered on purpose — DS components give
-    responsive layout (PRD M12) without putting an SPA in the submit path. %>
+    responsive layout (PRD M12) without putting an SPA in the submit path.
+
+    The fields themselves live in _fields.html.erb, inside a Turbo frame,
+    because which fields are asked depends on the answers so far (PRD M11's
+    conditional sections) and therefore has to be re-renderable. %>
 <%= title @form.name %>
 
 <% form_id = "easy_form_designer_submission_form" %>
+<% trigger_tokens = @form.rule_trigger_tokens %>
 
 <%= ds_form_layout(
       footer_content: ds_action_buttons(
@@ -10,7 +15,13 @@
         form_id: form_id
       )
     ) do %>
-  <%= ds_form(action: easy_form_designer_form_submission_path(@form), method: :post, id: form_id) do %>
+  <%# enctype is unconditional rather than "only when the form has a file
+      field": DSForm passes it straight onto the native <form> element, and a
+      multipart form encodes ordinary text fields identically as far as
+      Rails' param parsing is concerned. Making it conditional would just add
+      a way for a newly-added file field to silently arrive empty. %>
+  <%= ds_form(action: easy_form_designer_form_submission_path(@form), method: :post, id: form_id,
+              enctype: "multipart/form-data") do %>
     <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
 
     <% if @form.description.present? %>
@@ -21,142 +32,45 @@
       <%= ds_alert(variant: :error, body: flash.now[:error]) %>
     <% end %>
 
-    <% @form.fields.each do |field| %>
-      <% name = "answers[#{field.token}]" %>
-      <% value = @answers[field.token] %>
-      <% invalid = @missing_fields&.include?(field) %>
-
-      <% # Only DSPasswordField supports helper_text natively — every other DS
-         # form control here does not, so field.help_text is rendered as a
-         # plain caption instead of being passed through as a keyword. %>
-      <% case field.widget %>
-      <% when "long_text" %>
-        <%= ds_textarea(name: name, value: value, label: field.label,
-                        required: field.required?, rows: 4) %>
-      <% when "select" %>
-        <%# Plain native select, not ds_select — see the note in
-            easy_form_designer_forms/new.html.erb: <easy8-ds-select> crashes
-            its own internal Vue mount client-side regardless of wrapping
-            context, leaving the dropdown permanently empty. A requester
-            hitting that on a real Dropdown-mapped field would be unable to
-            submit at all, so this isn't a cosmetic downgrade. %>
-        <div class="form-group">
-          <label for="field_<%= field.token %>">
-            <%= field.label %><%= " *".html_safe if field.required? %>
-          </label>
-          <%# include_blank is unconditional — a required field must still
-              start with nothing chosen. `include_blank: !field.required?`
-              here previously meant a required select had no blank option,
-              so the browser auto-selected the first real option (e.g.
-              "Low" priority) with no requester action at all: a silently
-              guessed answer, not a validated one. required: still applies
-              the native HTML — and our own — required check to the blank
-              option, so an unanswered required select is now caught rather
-              than defaulted. %>
-          <%= select_tag name,
-                        options_for_select(field.options, value),
-                        include_blank: true, required: field.required?,
-                        id: "field_#{field.token}" %>
-        </div>
-      <% when "number" %>
-        <%# min: 0 only for the one native attribute with a known-safe floor
-            (estimated hours can't be negative). No general min/max authoring
-            here — a per-field author-configured range is M7, not this
-            slice. %>
-        <%= ds_number_field(name: name, value: value, label: field.label,
-                            required: field.required?,
-                            min: (0 if field.mapped_attribute == "estimated_hours")) %>
-      <% when "radio" %>
-        <%# Plain radio_button_tag, not ds_radio_group — DSRadioGroup's
-            "options" prop never hydrates from the server-rendered
-            <script type="application/json"> prop tag outside the SPA
-            mount context (confirmed live: Vue logs "Missing required
-            prop: options" and the fieldset renders with no inputs at
-            all), the same class of standalone-mount limitation already
-            documented above for <easy8-ds-select>. %>
-        <fieldset class="form-group">
-          <legend><%= field.label %><%= " *".html_safe if field.required? %></legend>
-          <% field.options.each do |option_label, option_value| %>
-            <label>
-              <%= radio_button_tag name, option_value, value == option_value,
-                                   required: field.required? %>
-              <%= option_label %>
-            </label>
-          <% end %>
-        </fieldset>
-      <% when "multi_select" %>
-        <%# Same reasoning as the "select" case above: a multi-value select
-            has the identical <easy8-ds-select> mount bug, so it inherits the
-            identical plain select_tag fallback — here with multiple: true
-            and an array-shaped param name. %>
-        <div class="form-group">
-          <label for="field_<%= field.token %>">
-            <%= field.label %><%= " *".html_safe if field.required? %>
-          </label>
-          <%= select_tag "#{name}[]",
-                        options_for_select(field.options, Array(value)),
-                        multiple: true, required: field.required?,
-                        id: "field_#{field.token}" %>
-        </div>
-      <% when "checkbox" %>
-        <%# Plain check_box_tag, not DesignSystem::Components::Checkbox —
-            its "option" prop has the same standalone-mount hydration
-            failure described above for RadioGroup (confirmed live: Vue
-            logs "Missing required prop: option" and nothing renders).
-            hidden_field_tag first is the standard Rails idiom so an
-            unchecked box still submits "0" rather than nothing at all —
-            without it, missing?/answerable? below would see no param and
-            treat "explicitly unchecked" as "never answered" again, the
-            exact bug this widget exists to fix. %>
-        <%# id: nil — hidden_field_tag and check_box_tag otherwise both
-            default their id from the same name, which is invalid HTML
-            (duplicate ids) and made Playwright resolve the wrong element
-            during verification. %>
-        <%= hidden_field_tag name, "0", id: nil %>
-        <label>
-          <%= check_box_tag name, "1", value == "1" %>
-          <%= field.label %><%= " *".html_safe if field.required? %>
-        </label>
-      <% when "user" %>
-        <%# No bare ds_autocomplete helper exists in core, so the component is
-            called directly — same reasoning as Checkbox above. Scoped to this
-            form's own project via collection_args, the same mechanism core
-            itself uses to scope a principal autocomplete to one project's
-            members rather than the whole instance. %>
-        <%= DesignSystem::Components::Autocomplete.render(
-              view_context: self, entity: "principal", name: name,
-              label: field.label, required: field.required?,
-              clearable: !field.required?,
-              settings: { collection: "visible_active_users",
-                          collection_args: { project_id: @form.project.id } },
-              value: existing_principal_value(value)
-            ) %>
-      <% when "date" %>
-        <%# DesignSystem::Components::Datepicker has no required: keyword at
-            all (confirmed from its initialize signature) — passing one
-            raises ArgumentError unconditionally. label: is omitted and
-            replaced with a manual <label> so the required marker matches
-            every other field type's plain asterisk instead of a separate
-            "Required" line — Datepicker manages its own internal id/label
-            pairing regardless of whether label: is passed, so nothing is
-            lost by supplying our own here. Required-ness is still enforced
-            server-side by missing_required_fields regardless of this. %>
-        <label>
-          <%= field.label %><%= " *".html_safe if field.required? %>
-        </label>
-        <%= ds_datepicker(name: name, value: value, label: nil) %>
-      <% else %>
-        <%= ds_text_field(name: name, value: value, label: field.label,
-                          required: field.required?) %>
-      <% end %>
-
-      <% if field.help_text.present? %>
-        <p class="caption"><%= field.help_text %></p>
-      <% end %>
-
-      <% if invalid %>
-        <span class="ds-form-field__error"><%= l(:activerecord_error_blank, default: "cannot be blank") %></span>
-      <% end %>
-    <% end %>
+    <%= render "fields" %>
   <% end %>
+<% end %>
+
+<% if trigger_tokens.any? %>
+  <%# PRD M11's refresh trip. A SIBLING form, not a nested one: nested forms
+      are invalid HTML, and the answers have to reach the server by POST
+      (a file-bearing multipart form can't be projected into a URL, and a
+      long_text answer would blow past sane URL limits).
+
+      data-turbo is explicit because the base layout sets data-turbo="false"
+      on <body>, so Turbo submissions are opt-in everywhere in Easy8 —
+      easy_ai's own turbo-frame forms set the same flag. %>
+  <%= form_tag refresh_easy_form_designer_form_submission_path(@form),
+               id: "efd-refresh-form",
+               data: { turbo: true,
+                       turbo_frame: EasyFormDesignerSubmissionsController::FIELDS_FRAME_ID } do %>
+    <%# Explicit, for the same reason the submit form above carries one:
+        form_tag's automatic token is not something to rely on here, and a
+        rejected refresh would look exactly like a rule that doesn't work.
+
+        id: nil because the submit form's own token input already claims
+        that id — two elements sharing one is invalid HTML, and this page
+        has been bitten by exactly that before (see the checkbox widget). %>
+    <%= hidden_field_tag :authenticity_token, form_authenticity_token, id: nil %>
+  <% end %>
+
+  <%# Same bootstrap convention the builder already uses (see
+      easy_form_designer_forms/edit.html.erb): the entrypoint publishes the
+      function on window, EASY.schedule.late defers until the DS custom
+      elements have been defined. %>
+  <script defer>
+    EASY.schedule.late(() => {
+      window.EasyFormDesigner?.initSubmissionForm({
+        formId: "<%= j form_id %>",
+        refreshFormId: "efd-refresh-form",
+        frameId: "<%= j EasyFormDesignerSubmissionsController::FIELDS_FRAME_ID %>",
+        triggerTokens: <%= raw json_escape(trigger_tokens.to_json) %>
+      });
+    });
+  </script>
 <% end %>

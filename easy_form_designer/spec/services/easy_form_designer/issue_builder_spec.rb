@@ -216,6 +216,258 @@ RSpec.describe EasyFormDesigner::IssueBuilder, logged: :admin do
         expect { build_issue }.to raise_error(described_class::SubmissionError, /boom/)
         expect(EasyFormDesigner::FormSubmission.count).to eq(0)
       end
+
+      # The controller needs the rejected Issue itself, not just the joined
+      # message, to attribute each error back to the field that wrote it.
+      it "carries the rejected issue on the error" do
+        expect { build_issue }.to raise_error(described_class::SubmissionError) { |error|
+          expect(error.issue).to be_a(Issue)
+        }
+      end
+    end
+
+    # PRD M8. AnswerResolver is exercised in its own spec; what matters HERE
+    # is that IssueBuilder actually routes through it end to end, on a real
+    # Issue, for both a native attribute and a custom field.
+    context "with a hidden preset field" do
+      # Explicit, not IssuePriority.active.first! — a global enumeration
+      # whose ambient contents depend on what else has run in the suite.
+      # An explicitly-created record makes this test's own expectations
+      # independent of that.
+      let_it_be(:preset_priority) { create(:issue_priority) }
+
+      let(:form) do
+        create(:easy_form_designer_form, project: project, tracker: tracker, name: "Hidden preset form")
+      end
+
+      let(:answers) { {} }
+
+      before do
+        create(:easy_form_designer_form_field, form: form, label: "Priority", token: "priority", widget: "select",
+                                               mapped_attribute: "priority_id", hidden: true,
+                                               preset_value: preset_priority.id.to_s)
+        form.reload
+        form.publish
+      end
+
+      it "stamps the preset even though the requester never answered it" do
+        expect(build_issue.issue.priority_id).to eq(preset_priority.id)
+      end
+
+      # The actual security property: a hidden field is not rendered on the
+      # requester form at all, but nothing stops a crafted request from
+      # POSTing a value for its token anyway. The form's own preset must win
+      # regardless of what (if anything) was submitted for it.
+      context "when the request carries a value for the hidden field's token anyway" do
+        let_it_be(:other_priority) { create(:issue_priority) }
+        let(:answers) { { "priority" => other_priority.id.to_s } }
+
+        it "ignores the submitted value and writes the preset" do
+          expect(other_priority.id).not_to eq(preset_priority.id) # sanity: the two really do differ
+          expect(build_issue.issue.priority_id).to eq(preset_priority.id)
+        end
+      end
+
+      it "records the RESOLVED value, not the raw submission, on the audit trail" do
+        expect(build_issue.payload["priority"]).to eq(preset_priority.id.to_s)
+      end
+    end
+
+    context "with a hidden preset on a custom field" do
+      # Deliberately NOT named text_cf: the outer describe's own before hook
+      # (which runs for every example under #call, this nested context
+      # included) already maps a field to the outer let_it_be(:text_cf) — a
+      # same-named local override here would shadow that reference too
+      # (let/let_it_be always resolve to the innermost definition, even from
+      # a hook written in an ancestor group), so the outer hook's field and
+      # this context's own field would collide on the very custom field this
+      # test is trying to isolate.
+      let_it_be(:routing_cf) do
+        create(:issue_custom_field, field_format: "string", projects: [project.id], trackers: [tracker])
+      end
+
+      let(:form) do
+        create(:easy_form_designer_form, project: project, tracker: tracker, name: "Hidden CF form")
+      end
+
+      let(:answers) { {} }
+
+      before do
+        create(:easy_form_designer_form_field, form: form, label: "Routing tag", token: "routing_tag",
+                                               widget: "text", custom_field: routing_cf, mapped_attribute: nil,
+                                               hidden: true, preset_value: "portal-intake")
+        form.reload
+        form.publish
+      end
+
+      it "writes the preset to the custom field" do
+        issue = build_issue.issue.reload
+
+        expect(issue.custom_field_value(routing_cf)).to eq("portal-intake")
+      end
+    end
+
+    context "with a hidden day-offset preset on a date field" do
+      let(:form) do
+        create(:easy_form_designer_form, project: project, tracker: tracker, name: "Hidden due date form")
+      end
+
+      let(:answers) { {} }
+
+      before do
+        create(:easy_form_designer_form_field, :preset_due_date_offset, form: form, label: "Due date",
+                                                                        token: "due_date")
+        form.reload
+        form.publish
+      end
+
+      it "stamps due_date as today + the configured offset" do
+        expect(build_issue.issue.due_date).to eq(Date.current + 7)
+      end
+    end
+
+    # TemplateCompiler itself has no special-case knowledge of hidden fields —
+    # it just renders whatever answers hash it's handed. What matters is that
+    # IssueBuilder hands it the RESOLVED hash (post-AnswerResolver), so a
+    # template referencing a hidden field's token sees the preset like any
+    # other answer, not a blank the requester never had a chance to fill in.
+    context "when a subject template references a hidden field's token" do
+      # Same reason as routing_cf above: not named text_cf, to avoid shadowing
+      # the outer describe's shared let_it_be(:text_cf) that its own before
+      # hook (inherited into this context) also maps a field to.
+      let_it_be(:source_cf) do
+        create(:issue_custom_field, field_format: "string", projects: [project.id], trackers: [tracker])
+      end
+
+      let(:form) do
+        create(:easy_form_designer_form, project: project, tracker: tracker,
+                                         subject_template: "Intake via {{ source }}")
+      end
+
+      let(:answers) { {} }
+
+      before do
+        create(:easy_form_designer_form_field, form: form, label: "Source", token: "source", widget: "text",
+                                               custom_field: source_cf, mapped_attribute: nil,
+                                               hidden: true, preset_value: "self-service portal")
+        form.reload
+        form.publish
+      end
+
+      it "resolves the token to the preset" do
+        expect(build_issue.issue.subject).to eq("Intake via self-service portal")
+      end
+    end
+
+    # PRD M13. A file field's answer is uploads, not a value — it takes its
+    # own path (#attach_files) rather than either attribute hash, and lands
+    # as real Attachments through acts_as_attachable, exactly as a file
+    # dragged onto the issue would.
+    context "with a file upload field" do
+      let(:form) do
+        create(:easy_form_designer_form, project: project, tracker: tracker, name: "Upload form")
+      end
+
+      let(:upload) { fixture_file_upload("files/testfile.txt", "text/plain") }
+      let(:answers) { { "evidence" => [upload] } }
+
+      before do
+        create(:easy_form_designer_form_field, :file_upload, form: form, label: "Evidence", token: "evidence")
+        form.reload
+        form.publish
+      end
+
+      it "attaches the uploaded file to the created task", :aggregate_failures do
+        issue = build_issue.issue.reload
+
+        expect(issue.attachments.count).to eq(1)
+        expect(issue.attachments.first.filename).to eq("testfile.txt")
+      end
+
+      # Satisfies Attachment's own description_required? validation on
+      # instances that enable it, and makes the Files tab readable when a
+      # form has several file fields.
+      it "describes the attachment with the field's label" do
+        expect(build_issue.issue.reload.attachments.first.description).to eq("Evidence")
+      end
+
+      context "with several files on one field" do
+        let(:answers) do
+          { "evidence" => [fixture_file_upload("files/testfile.txt", "text/plain"),
+                           fixture_file_upload("files/yoda-tux-256.png", "image/png")] }
+        end
+
+        it "attaches every one of them" do
+          expect(build_issue.issue.reload.attachments.map(&:filename))
+            .to contain_exactly("testfile.txt", "yoda-tux-256.png")
+        end
+      end
+
+      # The JSON payload column cannot serialise an UploadedFile at all, so
+      # the audit trail records what was uploaded instead.
+      it "records filenames on the submission, not the upload objects" do
+        expect(build_issue.payload["evidence"]).to eq(["testfile.txt"])
+      end
+
+      context "when the template references the file field" do
+        let(:form) do
+          create(:easy_form_designer_form, project: project, tracker: tracker,
+                                           subject_template: "Report — {{ evidence }}")
+        end
+
+        it "renders the filenames rather than an unusable object" do
+          expect(build_issue.issue.subject).to eq("Report — testfile.txt")
+        end
+      end
+
+      # A task created with some files silently missing is worse than a clear
+      # failure. Attachment validates size/extension itself; a rejection has
+      # to take the whole submission down with it — and the rollback then
+      # removes both the rows and the files already written to disk.
+      context "when a file is rejected by Attachment's own validation" do
+        before { allow(Setting).to receive(:attachment_max_size).and_return("0") }
+
+        it "aborts the submission instead of half-attaching", :aggregate_failures do
+          expect { build_issue }.to raise_error(described_class::SubmissionError, /Evidence/)
+          expect(Issue.where(subject: "Upload form")).not_to exist
+          expect(EasyFormDesigner::FormSubmission.count).to eq(0)
+        end
+      end
+    end
+
+    context "D1 — a hidden preset on status_id and category_id" do
+      let_it_be(:category) { project.issue_categories.create!(name: "Ops") }
+
+      # Tracker#issue_statuses (what AvailableAttributes/FormField#native_options
+      # actually reads for a status_id mapping) is derived from the tracker's
+      # OWN workflow transitions, not a static list — a freshly-created
+      # tracker with no workflow configured has none at all, so a status_id
+      # preset would have nothing legal to be.
+      let_it_be(:status_transition) { create(:workflow_transition, tracker: tracker) }
+
+      let(:form) do
+        create(:easy_form_designer_form, project: project, tracker: tracker, name: "Hidden routing form")
+      end
+
+      let(:answers) { {} }
+
+      before do
+        create(:easy_form_designer_form_field, form: form, label: "Status", token: "status", widget: "select",
+                                               mapped_attribute: "status_id", hidden: true,
+                                               preset_value: tracker.issue_statuses.first.id.to_s)
+        create(:easy_form_designer_form_field, form: form, label: "Category", token: "category", widget: "select",
+                                               mapped_attribute: "category_id", hidden: true,
+                                               preset_value: category.id.to_s)
+        form.reload
+        form.publish
+      end
+
+      it "stamps both status and category", :aggregate_failures do
+        issue = build_issue.issue
+
+        expect(issue.status_id).to eq(tracker.issue_statuses.first.id)
+        expect(issue.category_id).to eq(category.id)
+      end
     end
   end
 end

@@ -16,12 +16,23 @@ module EasyFormDesigner
              inverse_of: :form,
              dependent: :destroy
 
+    # PRD M11. Destroying a section destroys its member fields with it —
+    # deleting the container deletes the contents, matching what the Form
+    # itself already does to its fields.
+    has_many :sections,
+             -> { order(:position) },
+             class_name: "EasyFormDesigner::FormSection",
+             foreign_key: :form_id,
+             inverse_of: :form,
+             dependent: :destroy
+
     has_many :submissions,
              class_name: "EasyFormDesigner::FormSubmission",
              inverse_of: :form,
              dependent: :nullify
 
     accepts_nested_attributes_for :fields, allow_destroy: true
+    accepts_nested_attributes_for :sections, allow_destroy: true
 
     enum :status, { draft: 0, published: 1 }, prefix: true, default: "draft"
 
@@ -39,7 +50,7 @@ module EasyFormDesigner
     # only — accepts_nested_attributes_for alone does not make a key safe,
     # it just defines the setter that this list has to permit.
     safe_attributes(*%w[name description project_id tracker_id subject_template
-                        description_template fields_attributes])
+                        description_template fields_attributes sections_attributes])
 
     validates :name, presence: true
     validates :project, :tracker, presence: true
@@ -87,6 +98,48 @@ module EasyFormDesigner
     # @return [Boolean]
     def publishable?
       fields.any? && fields.all?(&:mapped?)
+    end
+
+    # PRD M11. Tokens of every field sitting in a section whose rule
+    # evaluates false for these answers — i.e. fields that were never asked.
+    #
+    # One implementation, three callers that each need the same answer for a
+    # different reason: SubmissionValidator (don't demand a required field
+    # nobody was shown), AnswerResolver (discard any value that reached us
+    # for one anyway), and the requester view (render no input at all). They
+    # deliberately don't share state with each other, so they each ask here.
+    #
+    # @param answers [Hash] answers keyed by field token
+    # @return [Array<String>]
+    def tokens_hidden_by_section(answers)
+      sections.reject { |section| section.visible?(answers) }
+              .flat_map { |section| section.fields.map(&:token) }
+    end
+
+    # @param answers [Hash]
+    # @return [Array<EasyFormDesigner::FormSection>]
+    def visible_sections(answers)
+      sections.select { |section| section.visible?(answers) }
+    end
+
+    # PRD M11. Tokens of the fields some section's rule actually reads —
+    # answering them is what can change which fields the requester is asked,
+    # so they are the only ones worth re-rendering the form for.
+    #
+    # The requester page hands this list to its refresh script, which watches
+    # exactly these answers and asks the server for a fresh render when one
+    # of them changes. Easy8's issue form marks its own equivalents with a
+    # CSS class (`issue_onchange_reload`); a list of tokens is the same idea
+    # without needing a hook attribute on a control, which the Design System
+    # components cannot carry anyway (their data attributes are a closed
+    # whitelist).
+    #
+    # @return [Array<String>]
+    def rule_trigger_tokens
+      trigger_ids = sections.filter_map(&:visibility_field_id).uniq
+      return [] if trigger_ids.empty?
+
+      fields.select { |field| trigger_ids.include?(field.id) }.map(&:token)
     end
 
     # @return [Boolean]

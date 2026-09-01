@@ -16,14 +16,23 @@ module EasyFormDesigner
     # Which widget may drive which native attribute. Assignee is offered only
     # under "user" (a searchable lookup), not "select" (a plain dropdown of
     # every assignable user) — the whole point of adding the richer widget.
+    #
+    # status_id/category_id (PRD M8's D1) are offered here rather than kept
+    # preset-only: an author may equally want a visible Status/Category
+    # dropdown, not just a hidden stamp.
     NATIVE_BY_WIDGET = {
       "text" => %w[subject],
       "long_text" => %w[description],
-      "select" => %w[priority_id],
+      "select" => %w[priority_id status_id category_id],
       "date" => %w[due_date start_date],
       "number" => %w[estimated_hours],
-      "radio" => %w[priority_id],
+      "radio" => %w[priority_id status_id category_id],
       "user" => %w[assigned_to_id],
+      # PRD M13. A file field has exactly one possible target and no
+      # custom-field alternative — Redmine's attachment-format custom field
+      # reparents the file onto a custom VALUE, which isn't what "a
+      # screenshot on the ticket" means to anyone reading the task.
+      "file" => [EasyFormDesigner::FormField::ATTACHMENTS_ATTRIBUTE],
     }.freeze
 
     # Which widget may drive which custom-field format. "multi_select" and
@@ -129,6 +138,9 @@ module EasyFormDesigner
       when "due_date" then l(:field_due_date)
       when "start_date" then l(:field_start_date)
       when "estimated_hours" then l(:field_estimated_hours)
+      when "status_id" then l(:field_status)
+      when "category_id" then l(:field_category)
+      when EasyFormDesigner::FormField::ATTACHMENTS_ATTRIBUTE then l(:label_attachment_plural)
       else name.humanize
       end
     end

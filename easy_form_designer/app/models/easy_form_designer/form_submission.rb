@@ -1,8 +1,11 @@
 module EasyFormDesigner
   # One completed submission and the task it produced.
   #
-  # `payload` keeps the raw answers keyed by field token, so the record of what
-  # the requester actually typed survives any later edit to the issue.
+  # `payload` keeps the RESOLVED answers keyed by field token — post
+  # AnswerResolver, so a hidden field's preset is what's recorded here, not
+  # whatever (if anything) a request happened to carry for its token. This is
+  # what was actually written to the task, and the record of it survives any
+  # later edit to the issue.
   class FormSubmission < EasyFormDesigner::ApplicationRecord
     belongs_to :form,
                class_name: "EasyFormDesigner::Form",

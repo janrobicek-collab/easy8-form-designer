@@ -22,6 +22,21 @@ module EasyFormDesigner
   class TemplateCompiler
     TOKEN_PATTERN = /\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/
 
+    # PRD M11 — a conditional section's block, in Mustache's familiar
+    # open/close shape:  {{#section_token}} ... {{/section_token}}
+    #
+    # The optional <p> wrappers are not decoration. The description template
+    # is CKEditor HTML, so a marker typed on its own line arrives as
+    # "<p>{{#hardware}}</p>" — consuming the wrapper along with the marker is
+    # what stops every compiled description growing a trail of empty
+    # paragraphs, whether the section is kept or dropped. Both wrappers are
+    # optional, so a marker used mid-sentence still matches.
+    #
+    # A single gsub over TOKEN_PATTERN can't express this: that pattern
+    # matches one identifier, and a bounded region needs the backreference to
+    # its own opening token to know where it ends.
+    SECTION_PATTERN = %r{(?:<p>\s*)?\{\{#\s*([a-zA-Z0-9_-]+)\s*\}\}(?:\s*</p>)?(.*?)(?:<p>\s*)?\{\{/\s*\1\s*\}\}(?:\s*</p>)?}m
+
     class UnknownToken < StandardError; end
 
     attr_reader :form, :answers
@@ -50,7 +65,28 @@ module EasyFormDesigner
     # @return [Array<String>]
     def self.unknown_tokens(form, template)
       known = form.fields.map(&:token)
-      normalize_entities(template).scan(TOKEN_PATTERN).flatten.uniq - known
+      normalized = normalize_entities(template)
+
+      # Section markers ({{#token}} / {{/token}}) are stripped before field
+      # tokens are scanned — TOKEN_PATTERN would otherwise never match them
+      # anyway (the # and / sit outside its character class), but removing
+      # them keeps this method's meaning exact: what it returns is field
+      # tokens the form can't provide, and nothing else.
+      normalized.scan(TOKEN_PATTERN).flatten.uniq - known
+    end
+
+    # Section tokens a template refers to that this form no longer has (PRD
+    # M11) — the section-level counterpart of .unknown_tokens, for the same
+    # publish-time warning.
+    #
+    # @param form [EasyFormDesigner::Form]
+    # @param template [String]
+    # @return [Array<String>]
+    def self.unknown_section_tokens(form, template)
+      known = form.sections.map(&:token)
+      referenced = normalize_entities(template).scan(/\{\{#\s*([a-zA-Z0-9_-]+)\s*\}\}/).flatten.uniq
+
+      referenced - known
     end
 
     # CKEditor emits a non-breaking space for some typed spaces, so a token the
@@ -74,11 +110,34 @@ module EasyFormDesigner
     def compile(template, which)
       return "" if template.blank?
 
-      self.class.normalize_entities(template).gsub(TOKEN_PATTERN) do
+      resolve_sections(self.class.normalize_entities(template)).gsub(TOKEN_PATTERN) do
         token = Regexp.last_match(1)
         raise UnknownToken, unknown_token_message(token, which) unless known_token?(token)
 
         yield(token)
+      end
+    end
+
+    # PRD M11. Runs before token substitution: keeps a visible section's
+    # block (markers removed, contents intact) and drops a hidden one's
+    # entirely, so the flat substitution below never sees tokens belonging to
+    # fields nobody was asked.
+    #
+    # An unknown section token is an error for the same reason an unknown
+    # field token is — a template still referring to a section somebody
+    # deleted should say so, not quietly emit its contents unconditionally.
+    #
+    # @param template [String]
+    # @return [String]
+    def resolve_sections(template)
+      template.gsub(SECTION_PATTERN) do
+        token = Regexp.last_match(1)
+        block = Regexp.last_match(2)
+        section = form.sections.detect { |s| s.token == token }
+
+        raise UnknownToken, unknown_section_message(token) if section.blank?
+
+        section.visible?(answers) ? block : ""
       end
     end
 
@@ -118,6 +177,12 @@ module EasyFormDesigner
         checkbox_label(raw)
       when "user"
         user_label(raw)
+      when "file"
+        # PRD M13. IssueBuilder hands this compiler filenames, never the
+        # upload objects themselves (see its #serializable_answers), so a
+        # file token reads "photo.png, receipt.pdf" rather than being
+        # unusable in a template.
+        Array(raw).join(", ")
       else
         raw.to_s
       end
@@ -147,6 +212,12 @@ module EasyFormDesigner
     def format_date(raw)
       date = raw.is_a?(Date) ? raw : Date.safe_parse(raw.to_s)
       date ? ::I18n.l(date) : raw.to_s
+    end
+
+    # @return [String]
+    def unknown_section_message(token)
+      ::I18n.t("easy_form_designer.error.unknown_section",
+               token: "{{##{token}}}")
     end
 
     # @return [String]

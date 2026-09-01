@@ -17,6 +17,7 @@ export function createBuilderApp({ rootContainerId }: CreateBuilderData): void {
     projectId: Number(el.dataset.projectId),
     trackerId: Number(el.dataset.trackerId),
     attributesUrl: String(el.dataset.attributesUrl ?? ""),
+    presetOptionsUrl: String(el.dataset.presetOptionsUrl ?? ""),
   };
 
   // The saved fields/templates aren't otherwise reachable — without this the

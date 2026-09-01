@@ -82,9 +82,12 @@ RSpec.describe EasyFormDesigner::AvailableAttributes, logged: :admin do
     it "offers only widget-compatible native attributes", :aggregate_failures do
       expect(attributes.for_widget("text")[:native]).to eq(%w[subject])
       expect(attributes.for_widget("date")[:native]).to match_array(%w[due_date start_date])
-      expect(attributes.for_widget("select")[:native]).to eq(%w[priority_id])
+      # PRD M8 (D1): status_id/category_id are offered alongside priority_id —
+      # not preset-only, since an author may equally want a visible
+      # Status/Category dropdown.
+      expect(attributes.for_widget("select")[:native]).to eq(%w[priority_id status_id category_id])
       expect(attributes.for_widget("number")[:native]).to eq(%w[estimated_hours])
-      expect(attributes.for_widget("radio")[:native]).to eq(%w[priority_id])
+      expect(attributes.for_widget("radio")[:native]).to eq(%w[priority_id status_id category_id])
       expect(attributes.for_widget("user")[:native]).to eq(%w[assigned_to_id])
     end
 

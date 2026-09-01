@@ -284,5 +284,90 @@ RSpec.describe EasyFormDesigner::TemplateCompiler, logged: :admin do
     it "lists template tokens no field provides" do
       expect(described_class.unknown_tokens(form, "{{ who }} and {{ nope }}")).to eq(["nope"])
     end
+
+    # A section marker is not a field token; reporting it as one would send
+    # the author looking for a field that was never supposed to exist.
+    it "does not report a section marker as an unknown field token" do
+      expect(described_class.unknown_tokens(form, "{{#extras}}{{ who }}{{/extras}}")).to be_empty
+    end
+  end
+
+  # PRD M11 — conditional section blocks, in Mustache's open/close shape.
+  describe "section blocks" do
+    let_it_be(:shown_priority) { create(:issue_priority) }
+    let_it_be(:other_priority) { create(:issue_priority) }
+
+    let(:form) do
+      create(:easy_form_designer_form, project: project, tracker: tracker,
+                                       description_template: description_template)
+    end
+
+    let(:description_template) { "Base line.{{#extras}}Serial: {{ serial }}{{/extras}}" }
+    let(:answers) { { "priority" => priority_answer, "serial" => "SN-12345" } }
+    let(:priority_answer) { shown_priority.id.to_s }
+
+    before do
+      trigger = create(:easy_form_designer_form_field, :select_priority, form: form, label: "Priority",
+                                                                         token: "priority")
+      section = create(:easy_form_designer_form_section, :gated, form: form, name: "Extras", token: "extras",
+                                                                 visibility_field: trigger,
+                                                                 visibility_value: shown_priority.id.to_s)
+      create(:easy_form_designer_form_field, form: form, label: "Serial", token: "serial", widget: "text",
+                                             mapped_attribute: "subject", section: section)
+      form.reload
+    end
+
+    it "keeps the block, markers removed, when the section is visible" do
+      expect(compiler.description).to eq("Base line.Serial: SN-12345")
+    end
+
+    context "when the section is hidden" do
+      let(:priority_answer) { other_priority.id.to_s }
+
+      it "drops the block entirely" do
+        expect(compiler.description).to eq("Base line.")
+      end
+
+      # The block's own tokens must never reach the flat substitution pass —
+      # they belong to fields nobody was asked.
+      it "does not raise on a token inside the dropped block" do
+        expect { compiler.description }.not_to raise_error
+      end
+    end
+
+    # CKEditor wraps a marker typed on its own line in its own paragraph.
+    # Consuming that wrapper is what stops every compiled description
+    # growing a trail of empty paragraphs.
+    context "with CKEditor-style paragraph wrapping" do
+      let(:description_template) do
+        "<p>Base line.</p><p>{{#extras}}</p><p>Serial: {{ serial }}</p><p>{{/extras}}</p>"
+      end
+
+      it "leaves no empty paragraph behind when visible" do
+        expect(compiler.description).to eq("<p>Base line.</p><p>Serial: SN-12345</p>")
+      end
+
+      context "when hidden" do
+        let(:priority_answer) { other_priority.id.to_s }
+
+        it "leaves no empty paragraph behind when dropped" do
+          expect(compiler.description).to eq("<p>Base line.</p>")
+        end
+      end
+    end
+
+    context "when the template names a section that no longer exists" do
+      let(:description_template) { "{{#gone}}orphaned{{/gone}}" }
+
+      it "fails loudly rather than emitting the block unconditionally" do
+        expect { compiler.description }.to raise_error(described_class::UnknownToken, /gone/)
+      end
+    end
+  end
+
+  describe ".unknown_section_tokens" do
+    it "lists section markers the form no longer has" do
+      expect(described_class.unknown_section_tokens(form, "{{#gone}}x{{/gone}}")).to eq(["gone"])
+    end
   end
 end

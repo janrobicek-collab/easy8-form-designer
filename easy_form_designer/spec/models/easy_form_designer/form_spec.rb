@@ -42,6 +42,45 @@ RSpec.describe EasyFormDesigner::Form, logged: :admin do
     end
   end
 
+  # PRD M11. The requester page watches exactly these answers and asks the
+  # server for a fresh render when one of them changes, so getting the set
+  # wrong means either a section that never appears or a round trip on every
+  # keystroke of an unrelated field.
+  describe "#rule_trigger_tokens" do
+    subject(:form) { create(:easy_form_designer_form, project: project, tracker: tracker) }
+
+    let(:trigger) do
+      create(:easy_form_designer_form_field, :select_priority, form: form, label: "Priority", token: "priority")
+    end
+
+    it "is empty when no section has a rule" do
+      create(:easy_form_designer_form_field, form: form, token: "reason")
+      create(:easy_form_designer_form_section, form: form, name: "Notes", token: "notes")
+
+      expect(form.reload.rule_trigger_tokens).to be_empty
+    end
+
+    it "names the field a rule reads, and only that one", :aggregate_failures do
+      gated = create(:easy_form_designer_form_section, :gated, form: form, name: "Extras", token: "extras",
+                                                               visibility_field: trigger,
+                                                               visibility_value: create(:issue_priority).id.to_s)
+      create(:easy_form_designer_form_field, form: form, token: "serial", section: gated)
+
+      expect(form.reload.rule_trigger_tokens).to eq(["priority"])
+    end
+
+    it "names a field driving several sections once" do
+      priority = create(:issue_priority)
+      2.times do |i|
+        create(:easy_form_designer_form_section, :gated, form: form, name: "Extras #{i}", token: "extras_#{i}",
+                                                         visibility_field: trigger,
+                                                         visibility_value: priority.id.to_s)
+      end
+
+      expect(form.reload.rule_trigger_tokens).to eq(["priority"])
+    end
+  end
+
   describe "publishing" do
     subject(:form) { create(:easy_form_designer_form, project: project, tracker: tracker) }
 

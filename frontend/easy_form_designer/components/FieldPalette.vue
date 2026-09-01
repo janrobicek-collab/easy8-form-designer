@@ -2,7 +2,7 @@
 import { DSButton } from "@/src/design_system";
 import { WIDGETS, type Widget } from "../types";
 
-defineEmits<{ add: [widget: Widget] }>();
+defineEmits<{ add: [widget: Widget]; addSection: [] }>();
 
 const LABELS: Record<Widget, string> = {
   text: "Text",
@@ -14,6 +14,7 @@ const LABELS: Record<Widget, string> = {
   multi_select: "Multi-select",
   checkbox: "Checkbox",
   user: "User lookup",
+  file: "File upload",
 };
 </script>
 
@@ -29,6 +30,19 @@ const LABELS: Record<Widget, string> = {
       @click="$emit('add', widget)"
     >
       {{ LABELS[widget] }}
+    </DSButton>
+
+    <!-- PRD M11. A new field joins whichever section is selected, so adding
+         a section then adding fields is the whole grouping workflow — no
+         drag-and-drop needed. -->
+    <h3 class="efd-palette__title">Add group</h3>
+    <DSButton
+      variant="secondary"
+      class="efd-palette__item"
+      data-cy="form-designer-palette__section"
+      @click="$emit('addSection')"
+    >
+      Section
     </DSButton>
   </aside>
 </template>

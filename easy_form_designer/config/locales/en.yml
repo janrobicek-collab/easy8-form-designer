@@ -17,7 +17,34 @@ en:
       unmapped_field: "Every field must be mapped to a task attribute before publishing."
       duplicate_mapping: "Another field already maps to this attribute. Each field must map to a different attribute (Subject and Description are the only exceptions)."
       unknown_token: "Unknown token %{token} in the %{template} template."
+      unknown_section: "The template refers to a section %{token} that no longer exists on this form."
+      # PRD M11 — shown to the form author, at design time.
+      incomplete_visibility_rule: "A visibility rule needs a field, an operator, and a value. Set all of them, or clear the rule entirely."
+      visibility_field_unsupported: "This field cannot drive a visibility rule — it has no filterable value."
+      chained_visibility_rule: "A visibility rule cannot depend on a field that is itself inside a conditional section."
+      range_needs_two_values: "This operator compares against a range, so it needs both a lower and an upper value."
+      operator_needs_day_count: "This operator needs a whole number of days."
       no_attributes: "No mappable attributes exist for this project and task type."
+      # Shown to the requester, on the field itself.
+      invalid_email: "must be a valid email address"
+      invalid_url: "must be a valid URL, including http:// or https://"
+      invalid_date: "must be a valid date"
+      # "Too early" means it needs to be AFTER the floor; "too late" means
+      # BEFORE the ceiling — worded from what the requester should do next,
+      # not as a double negative ("must not be before/after").
+      date_too_early: "must be after %{date}"
+      date_too_late: "must be before %{date}"
+      date_out_of_range: "must be between %{min} and %{max}"
+      # Shown to the form author, at design time.
+      invalid_range: "Minimum must not be greater than maximum."
+      range_not_supported: "A numeric range can only be set on a Number field."
+      invalid_date_range: "The earliest allowed date must not be after the latest allowed date."
+      date_range_not_supported: "A date range can only be set on a Date field."
+      date_bound_conflict: "Choose either a fixed date or a number of days from today for each bound, not both."
+      preset_conflict: "Choose either a fixed value or a number of days from today for the preset, not both."
+      preset_offset_not_supported: "A day-offset preset can only be set on a Date field."
+      preset_required_when_hidden: "A field hidden from the requester must have a preset value — otherwise it would submit and write nothing."
+      file_cannot_be_hidden: "A file upload field cannot be hidden from the requester — there is no such thing as a preset file."
   # Permission labels are looked up at the top level by Redmine, not namespaced.
   permission_view_easy_forms: "View forms"
   permission_manage_easy_forms: "Manage forms"
