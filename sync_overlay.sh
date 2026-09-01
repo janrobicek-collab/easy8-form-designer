@@ -18,6 +18,13 @@ cp -a "$REPO/frontend/easy_form_designer" "$APP/app/frontend/src/easy_form_desig
 rm -f "$APP/app/frontend/entrypoints/easy_form_designer.ts"
 cp -a "$REPO/frontend/entrypoints/easy_form_designer.ts" "$APP/app/frontend/entrypoints/easy_form_designer.ts"
 
+# REQ-19. playwright/ lives in the host app, not the engine — same
+# core-change rationale as the frontend overlay above (CORE_CHANGES.md #6).
+rm -rf "$APP/playwright/pages/easy_form_designer" "$APP/playwright/tests/easy_form_designer"
+cp -a "$REPO/playwright/pages/easy_form_designer" "$APP/playwright/pages/easy_form_designer"
+cp -a "$REPO/playwright/tests/easy_form_designer" "$APP/playwright/tests/easy_form_designer"
+
 echo "synced:"
-echo "  engine   $(find "$APP/easy_engines/easy_form_designer" -type f | wc -l) files"
-echo "  frontend $(find "$APP/app/frontend/src/easy_form_designer" -type f | wc -l) files"
+echo "  engine     $(find "$APP/easy_engines/easy_form_designer" -type f | wc -l) files"
+echo "  frontend   $(find "$APP/app/frontend/src/easy_form_designer" -type f | wc -l) files"
+echo "  playwright $(find "$APP/playwright/pages/easy_form_designer" "$APP/playwright/tests/easy_form_designer" -type f | wc -l) files"

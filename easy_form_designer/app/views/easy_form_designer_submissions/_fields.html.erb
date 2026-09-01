@@ -32,7 +32,7 @@
     <% renderable_fields = section.fields.reject(&:hidden?) %>
     <% next if renderable_fields.empty? %>
 
-    <h3 class="efd-form-section"><%= section.name %></h3>
+    <h3 class="efd-form-section" data-cy="section__group--<%= section.token %>"><%= section.name %></h3>
 
     <% renderable_fields.each do |field| %>
     <% name = "answers[#{field.token}]" %>
