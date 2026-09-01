@@ -27,9 +27,33 @@ repo/
 ├── frontend/
 │   ├── easy_form_designer/    # builder Vue app  → overlays app/frontend/src/
 │   └── entrypoints/           # Vite entrypoint  → overlays app/frontend/entrypoints/
-├── CORE_CHANGES.md            # the four things that must live outside the engine
+├── playwright/                # smoke tests       → overlays the host app's playwright/
+├── CORE_CHANGES.md            # the six things that must live outside the engine
 └── easy8_source_code/         # local Easy8 checkout (gitignored, not part of this repo)
 ```
+
+## Builder UI
+
+Rebuilt (2026-09-01) in the `easy_automations`/Launchpad idiom rather than a
+bespoke palette-canvas-config-panel layout: a form is a list of **sections**
+(`SectionCard`), each a bordered `DSFieldset` block owning its own **fields**
+(`FieldRow`, also a `DSFieldset`) directly — a field's membership is which
+section's array it lives in, nothing else. Both levels reorder and move by
+drag (`vuedraggable`, shared group across sections so a field can be dragged
+into a different one), driven by a Pinia store
+(`frontend/easy_form_designer/store/formBuilderStore.ts`) instead of the
+Vue tree passing state through props/emits. A field's rarely-used settings
+(validation, ranges, presets) live behind an inline "Advanced" toggle
+(`FieldAdvanced`/`FieldPreset`) rather than a separate config panel. The
+builder is localized via `window.EasyLocale` — real Rails i18n keys under
+`easy_form_designer.builder.*` in `config/locales/{en,cs}.yml`, fetched
+client-side, not a bundled translation file.
+
+**Every field now belongs to a section** — enforced at the DB level
+(`section_id` is `NOT NULL`) and in the UI (the last remaining section can't
+be removed, since there'd be nowhere left to add a field). A form's render
+order — both in the builder and on the requester-facing page — is sections in
+their own order, each section's fields in theirs.
 
 ## Pipeline
 
@@ -55,8 +79,15 @@ Deferred: S1 form-level group access control, M12 responsive audit.
 
 ## Development
 
-See `CORE_CHANGES.md` for the overlay symlinks. Run specs with:
+See `CORE_CHANGES.md` for what lives outside the engine and `sync_overlay.sh`
+for how `repo/` gets copied into a local Easy8 checkout. Run specs with:
 
 ```bash
 bundle exec rspec easy_engines/easy_form_designer/spec
+```
+
+Smoke tests (Playwright, against a real running instance):
+
+```bash
+yarn workspace @easy/playwright test tests/easy_form_designer
 ```
