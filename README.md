@@ -37,14 +37,21 @@ repo/
 |---|---|
 | `AvailableAttributes` | What a field may map to, for one project + tracker pair. Custom fields are the **intersection** of `IssueCustomField`, `project.all_issue_custom_fields` and `tracker.custom_fields` — trusting either list alone is wrong. Also enforces widget↔format compatibility. |
 | `TemplateCompiler` | Resolves `{{ token }}` in the subject and description templates. An unknown token raises rather than silently blanking. |
+| `SubmissionValidator` | Gate in front of `IssueBuilder`. Returns errors keyed by **field token**, so each lands on its own input. "Required" (widget-aware — a required checkbox must be *checked*) stops the rest; the format rules (email, URL, numeric range, date range — fixed or "N days from today", evaluated at submission time) and the mapped custom field's own rules — delegated to `CustomField#validate_field_value` rather than reimplemented — all run and accumulate. |
 | `IssueBuilder` | Creates the task. Assigns project and tracker **before** any custom value (Redmine defect #19368 drops them otherwise) and uses the `custom_field_values=` hash form. Transactional with the submission record. |
 
 ## Status
 
-Pre-release, behind the `:easy_form_designer_enabled` feature flag. First slice
-covers PRD M1, M3–M6, M9 and part of M2/M7 — four widget types
-(text, long text, dropdown, date). Deferred to the next slice: the remaining six
-field types, URL/number-range validation, hidden/preset fields, group access control.
+Pre-release, behind the `:easy_form_designer_enabled` feature flag. Covers PRD
+M1–M9, M11, and M13: all ten widget types, the project+tracker gateway,
+field→attribute mapping, the subject/description template compiler, required +
+format validation (email, URL, numeric range, date range) with every failure
+reported on the field that caused it, default/hidden/preset fields, conditional
+sections (a section hidden by default until a field-equals rule is satisfied,
+excluded from the compiled description while hidden), and file attachments.
+Date-range rules have no client-side check — `DesignSystem::Components::Datepicker`
+takes no min/max keyword at all — so that one is enforced server-side only.
+Deferred: S1 form-level group access control, M12 responsive audit.
 
 ## Development
 
