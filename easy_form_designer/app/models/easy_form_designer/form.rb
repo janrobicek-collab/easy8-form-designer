@@ -9,6 +9,15 @@ module EasyFormDesigner
     belongs_to :tracker
     belongs_to :author, class_name: "User"
 
+    # REQ-16. `position` is scoped WITHIN a field's section (FormSection's
+    # own `fields` association orders by the same column, correctly, because
+    # it's already implicitly scoped by `section_id`), so `order(:position)`
+    # here does not give the form's real rendered field order — two fields
+    # in different sections can share the same position number. Nothing that
+    # iterates this association cares about order (mapping/uniqueness
+    # checks, publishable?, rule_trigger_tokens), so it's left as a cheap,
+    # deterministic order rather than removed. Every render path goes
+    # through `sections` → `section.fields` instead.
     has_many :fields,
              -> { order(:position) },
              class_name: "EasyFormDesigner::FormField",
@@ -33,6 +42,8 @@ module EasyFormDesigner
 
     accepts_nested_attributes_for :fields, allow_destroy: true
     accepts_nested_attributes_for :sections, allow_destroy: true
+
+    after_create :ensure_default_section
 
     enum :status, { draft: 0, published: 1 }, prefix: true, default: "draft"
 
@@ -161,6 +172,20 @@ module EasyFormDesigner
       return if project.trackers.include?(tracker)
 
       errors.add(:tracker_id, :invalid)
+    end
+
+    # REQ-16. Every field requires a section, so a brand-new form needs one
+    # to exist before the builder can ever add a first field — otherwise the
+    # author would open the builder with nowhere to put anything. Not a
+    # validation ("a form must have a section") because that would reject
+    # the form's own very first save, before this callback has had a chance
+    # to run; an after_create hook sidesteps the chicken-and-egg problem
+    # entirely. The builder is expected to never let the section count drop
+    # to zero after this (disabling removal of the last remaining one),
+    # which keeps the invariant true for the lifetime of the form rather
+    # than only at creation.
+    def ensure_default_section
+      sections.create!(name: I18n.t("easy_form_designer.form_section.default_name"), position: 1)
     end
 
     def all_fields_mapped

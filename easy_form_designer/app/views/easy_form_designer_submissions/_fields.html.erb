@@ -13,32 +13,28 @@
     the flash) deliberately stays outside the frame, the same way Easy8 keeps
     subject and description outside the swapped region of the issue form. %>
 <%= turbo_frame_tag EasyFormDesignerSubmissionsController::FIELDS_FRAME_ID do %>
-  <%# Two different reasons a field renders NO input at all here — and in
+  <%# REQ-16. Every field lives in a section now, so rendering is a real
+      nested walk — sections outer, that section's own fields inner —
+      rather than a flat field list with a heading injected whenever the
+      section happened to change. A section with no renderable field left
+      in it (every field hidden, or the whole section itself gated shut)
+      renders nothing at all: no orphan heading.
+
+      Two different reasons a field renders NO input at all here — and in
       both cases the absence IS the security boundary, not a cosmetic hide,
       because the server discards anything a crafted request sends for such
       a token anyway (see AnswerResolver):
 
       * PRD M8 — `hidden?`, whose value comes from the author's preset.
-      * PRD M11 — sitting in a section whose visibility rule evaluates
-        false for the answers so far. %>
-  <% hidden_by_section = @form.tokens_hidden_by_section(@answers) %>
-  <% renderable_fields = @form.fields.reject { |f| f.hidden? || hidden_by_section.include?(f.token) } %>
-  <% rendered_section_id = :before_first_field %>
+      * PRD M11 — the section itself has a visibility rule that evaluates
+        false for the answers so far (@form.visible_sections). %>
+  <% @form.visible_sections(@answers).each do |section| %>
+    <% renderable_fields = section.fields.reject(&:hidden?) %>
+    <% next if renderable_fields.empty? %>
 
-  <% renderable_fields.each do |field| %>
-    <%# A heading each time the run of fields moves into a different
-        section. Fields are only ever appended in the builder, so a
-        section's fields stay contiguous in practice; an author who does
-        interleave them gets the heading repeated, which is honest about
-        the resulting order rather than hiding it. %>
-    <% if field.section_id != rendered_section_id %>
-      <% rendered_section_id = field.section_id %>
-      <% section = @form.sections.detect { |s| s.id == field.section_id } %>
-      <% if section.present? %>
-        <h3 class="efd-form-section"><%= section.name %></h3>
-      <% end %>
-    <% end %>
+    <h3 class="efd-form-section"><%= section.name %></h3>
 
+    <% renderable_fields.each do |field| %>
     <% name = "answers[#{field.token}]" %>
     <% value = @answers[field.token] %>
     <% field_messages = Array(@field_errors && @field_errors[field.token]) %>
@@ -227,6 +223,7 @@
         all — every format or custom-field rule ended up in the flash. %>
     <% field_messages.each do |message| %>
       <span class="ds-form-field__error"><%= message %></span>
+    <% end %>
     <% end %>
   <% end %>
 <% end %>

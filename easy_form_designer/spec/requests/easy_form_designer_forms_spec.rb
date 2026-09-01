@@ -54,9 +54,13 @@ RSpec.describe "EasyFormDesignerForms", type: :request, logged: :admin do
 
       expect(response).to have_http_status(:success)
 
-      section = form.reload.sections.sole
+      # Two sections now exist: the form's own auto-created default (holding
+      # the pre-existing hidden_field, whose payload above never mentions
+      # section_id and so keeps it) plus the one this PATCH just created.
+      section = form.reload.sections.find_by!(name: "Hardware")
       serial = form.fields.find_by(token: "serial")
 
+      expect(form.sections.count).to eq(2)
       expect(section.name).to eq("Hardware")
       expect(serial.section_id).to eq(section.id)
     end

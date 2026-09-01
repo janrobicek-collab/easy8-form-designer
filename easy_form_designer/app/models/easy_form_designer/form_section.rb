@@ -222,6 +222,11 @@ module EasyFormDesigner
     # been asked is a materially harder problem (what does "equals" mean when
     # the field was never shown?), and the PRD doesn't ask for it. Refuse it
     # outright rather than half-supporting it.
+    #
+    # REQ-16 made a field's section mandatory, so `referenced_section` is
+    # never actually blank for a persisted field — the guard stays only as a
+    # defensive no-op against an in-memory FormField that hasn't been
+    # assigned one yet.
     def visibility_field_not_itself_conditional
       return if visibility_field.blank?
 

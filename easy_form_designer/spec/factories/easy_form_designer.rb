@@ -21,6 +21,12 @@ FactoryBot.define do
 
     form { association :easy_form_designer_form }
 
+    # REQ-16 — every field must belong to a section. Form#ensure_default_section
+    # guarantees a persisted form already has one ("General"), so this reuses
+    # it rather than creating a fresh section per field; a spec that wants a
+    # field in a SPECIFIC section still overrides this explicitly.
+    section { form.sections.first }
+
     # Mapped to a native attribute by default — an unmapped field is invalid.
     mapped_attribute { "subject" }
 

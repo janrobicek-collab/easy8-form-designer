@@ -25,6 +25,22 @@ RSpec.describe EasyFormDesigner::Form, logged: :admin do
     end
   end
 
+  # REQ-16. Every field requires a section, so a form has to have somewhere
+  # to put a first one before the builder can ever add it.
+  describe "#ensure_default_section" do
+    it "creates one section on creation" do
+      form = create(:easy_form_designer_form, project: project, tracker: tracker)
+
+      expect(form.sections.count).to eq(1)
+    end
+
+    it "names it from the locale" do
+      form = create(:easy_form_designer_form, project: project, tracker: tracker)
+
+      expect(form.sections.first.name).to eq(I18n.t("easy_form_designer.form_section.default_name"))
+    end
+  end
+
   describe "#publishable?" do
     subject(:form) { create(:easy_form_designer_form, project: project, tracker: tracker) }
 

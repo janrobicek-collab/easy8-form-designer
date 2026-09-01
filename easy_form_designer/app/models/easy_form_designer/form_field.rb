@@ -101,11 +101,13 @@ module EasyFormDesigner
                class_name: "IssueCustomField",
                optional: true
 
-    # PRD M11. Null means top-level / ungrouped.
+    # PRD M11 / REQ-16. Every field belongs to a section — Form guarantees a
+    # new form gets a default one (#ensure_default_section) and the builder
+    # never offers a way to add a field with none selected.
     belongs_to :section,
                class_name: "EasyFormDesigner::FormSection",
                inverse_of: :fields,
-               optional: true
+               optional: false
 
     safe_attributes(*%w[label help_text token widget required position mapped_attribute custom_field_id
                         validation_format min_value max_value
@@ -124,6 +126,7 @@ module EasyFormDesigner
               allow_blank: true
 
     validate :exactly_one_mapping
+    validate :section_belongs_to_form
     validate :custom_field_available_for_form
     validate :attribute_not_already_mapped_by_another_field
     validate :validation_format_matches_widget
@@ -418,6 +421,18 @@ module EasyFormDesigner
       return if mapped_attribute.present? ^ custom_field_id.present?
 
       errors.add(:base, I18n.t("easy_form_designer.error.unmapped_field"))
+    end
+
+    # Mirrors Form's own tracker_enabled_for_project check, applied here so a
+    # request that crafts a section_id belonging to a different form can't
+    # get past it — accepts_nested_attributes_for's own scoping already
+    # prevents this through the normal builder save path, but this makes it
+    # non-bypassable for anything posting straight at the controller.
+    def section_belongs_to_form
+      return if section.blank? || form.blank?
+      return if section.form_id == form_id
+
+      errors.add(:section_id, :invalid)
     end
 
     # A custom field is only legal here if it survives the project ∩ tracker

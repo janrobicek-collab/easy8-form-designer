@@ -103,6 +103,50 @@ RSpec.describe "EasyFormDesignerSubmissions", type: :request, logged: :admin do
     end
   end
 
+  # REQ-16. Every field belongs to a section now, so the requester page
+  # renders as a genuine nested walk (sections outer, fields inner) rather
+  # than a flat field list with a heading injected on section change.
+  describe "section grouping" do
+    let(:grouped_form) do
+      create(:easy_form_designer_form, project: project, tracker: tracker, name: "Grouped request")
+    end
+
+    before do
+      first_section = create(:easy_form_designer_form_section, form: grouped_form, name: "Requester details",
+                                                                token: "requester_details", position: 1)
+      second_section = create(:easy_form_designer_form_section, form: grouped_form, name: "Hardware",
+                                                                 token: "hardware", position: 2)
+      # An empty section — never given a field — must not render at all.
+      create(:easy_form_designer_form_section, form: grouped_form, name: "Unused", token: "unused", position: 3)
+
+      create(:easy_form_designer_form_field, form: grouped_form, label: "Name", token: "name", widget: "text",
+                                             mapped_attribute: "subject", section: first_section)
+      create(:easy_form_designer_form_field, form: grouped_form, label: "Model", token: "model", widget: "text",
+                                             mapped_attribute: "description", section: second_section)
+      grouped_form.reload
+      grouped_form.publish
+    end
+
+    it "renders a heading for every non-empty section and none for the empty one", :aggregate_failures do
+      get new_easy_form_designer_form_submission_path(grouped_form)
+
+      expect(response.body).to include(">Requester details<")
+      expect(response.body).to include(">Hardware<")
+      expect(response.body).not_to include("Unused")
+    end
+
+    it "renders fields in their section's order, before the next section's heading" do
+      get new_easy_form_designer_form_submission_path(grouped_form)
+
+      name_index = response.body.index('name="answers[name]"')
+      hardware_heading_index = response.body.index(">Hardware<")
+      model_index = response.body.index('name="answers[model]"')
+
+      expect(name_index).to be < hardware_heading_index
+      expect(hardware_heading_index).to be < model_index
+    end
+  end
+
   # PRD M11. The view-layer half of conditional sections: a hidden section's
   # fields must render no input at all (the same tamper boundary a hidden
   # field has), and its block must be gone from the compiled description.

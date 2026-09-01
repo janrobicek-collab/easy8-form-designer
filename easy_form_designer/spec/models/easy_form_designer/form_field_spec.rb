@@ -76,6 +76,33 @@ RSpec.describe EasyFormDesigner::FormField, logged: :admin do
     end
   end
 
+  # REQ-16. Every field now belongs to a section — a form-only concept, not
+  # something the requester or IssueBuilder ever sees directly.
+  describe "section" do
+    it "is invalid with no section" do
+      field = build(:easy_form_designer_form_field, form: form, section: nil)
+
+      expect(field).not_to be_valid
+    end
+
+    it "is invalid when the section belongs to a different form" do
+      foreign_form = create(:easy_form_designer_form, project: project, tracker: tracker)
+      foreign_section = create(:easy_form_designer_form_section, form: foreign_form)
+
+      field = build(:easy_form_designer_form_field, form: form, section: foreign_section)
+
+      expect(field).not_to be_valid
+    end
+
+    it "is valid in a section that belongs to the same form" do
+      section = create(:easy_form_designer_form_section, form: form)
+
+      field = build(:easy_form_designer_form_field, form: form, section: section)
+
+      expect(field).to be_valid
+    end
+  end
+
   describe "#options" do
     context "for a select mapped to a list custom field" do
       let_it_be(:list_cf) do
