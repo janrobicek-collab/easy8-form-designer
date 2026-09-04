@@ -1,0 +1,76 @@
+<%# Requester-facing form. Server-rendered on purpose — DS components give
+    responsive layout (PRD M12) without putting an SPA in the submit path.
+
+    The fields themselves live in _fields.html.erb, inside a Turbo frame,
+    because which fields are asked depends on the answers so far (PRD M11's
+    conditional sections) and therefore has to be re-renderable. %>
+<%= title @form.name %>
+
+<% form_id = "easy_form_designer_submission_form" %>
+<% trigger_tokens = @form.rule_trigger_tokens %>
+
+<%= ds_form_layout(
+      footer_content: ds_action_buttons(
+        actions: { submit: [{ id: "submit", label: l(:button_submit) }] },
+        form_id: form_id
+      )
+    ) do %>
+  <%# enctype is unconditional rather than "only when the form has a file
+      field": DSForm passes it straight onto the native <form> element, and a
+      multipart form encodes ordinary text fields identically as far as
+      Rails' param parsing is concerned. Making it conditional would just add
+      a way for a newly-added file field to silently arrive empty. %>
+  <%= ds_form(action: easy_form_designer_form_submission_path(@form), method: :post, id: form_id,
+              enctype: "multipart/form-data") do %>
+    <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+
+    <% if @form.description.present? %>
+      <p><%= @form.description %></p>
+    <% end %>
+
+    <% if flash.now[:error].present? %>
+      <%= ds_alert(variant: :error, body: flash.now[:error]) %>
+    <% end %>
+
+    <%= render "fields" %>
+  <% end %>
+<% end %>
+
+<% if trigger_tokens.any? %>
+  <%# PRD M11's refresh trip. A SIBLING form, not a nested one: nested forms
+      are invalid HTML, and the answers have to reach the server by POST
+      (a file-bearing multipart form can't be projected into a URL, and a
+      long_text answer would blow past sane URL limits).
+
+      data-turbo is explicit because the base layout sets data-turbo="false"
+      on <body>, so Turbo submissions are opt-in everywhere in Easy8 —
+      easy_ai's own turbo-frame forms set the same flag. %>
+  <%= form_tag refresh_easy_form_designer_form_submission_path(@form),
+               id: "efd-refresh-form",
+               data: { turbo: true,
+                       turbo_frame: EasyFormDesignerSubmissionsController::FIELDS_FRAME_ID } do %>
+    <%# Explicit, for the same reason the submit form above carries one:
+        form_tag's automatic token is not something to rely on here, and a
+        rejected refresh would look exactly like a rule that doesn't work.
+
+        id: nil because the submit form's own token input already claims
+        that id — two elements sharing one is invalid HTML, and this page
+        has been bitten by exactly that before (see the checkbox widget). %>
+    <%= hidden_field_tag :authenticity_token, form_authenticity_token, id: nil %>
+  <% end %>
+
+  <%# Same bootstrap convention the builder already uses (see
+      easy_form_designer_forms/edit.html.erb): the entrypoint publishes the
+      function on window, EASY.schedule.late defers until the DS custom
+      elements have been defined. %>
+  <script defer>
+    EASY.schedule.late(() => {
+      window.EasyFormDesigner?.initSubmissionForm({
+        formId: "<%= j form_id %>",
+        refreshFormId: "efd-refresh-form",
+        frameId: "<%= j EasyFormDesignerSubmissionsController::FIELDS_FRAME_ID %>",
+        triggerTokens: <%= raw json_escape(trigger_tokens.to_json) %>
+      });
+    });
+  </script>
+<% end %>

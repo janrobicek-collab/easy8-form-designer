@@ -1,0 +1,229 @@
+<%# The part of the requester form that depends on the answers so far, and
+    therefore has to be re-rendered when one of them changes (PRD M11).
+
+    A Turbo frame, which is the modern equivalent of the `#issue-dependent-fields`
+    container Easy8's own new-issue form swaps: the requester answers a field
+    some section's rule reads, the page posts every answer back to
+    EasyFormDesignerSubmissionsController#refresh, and the server re-renders
+    exactly this partial with the section rules evaluated against those
+    answers. The rule itself is never evaluated client-side — RuleEvaluator
+    stays the only implementation, and the browser only asks for a new render.
+
+    Everything that does NOT depend on the answers (the form's description,
+    the flash) deliberately stays outside the frame, the same way Easy8 keeps
+    subject and description outside the swapped region of the issue form. %>
+<%= turbo_frame_tag EasyFormDesignerSubmissionsController::FIELDS_FRAME_ID do %>
+  <%# REQ-16. Every field lives in a section now, so rendering is a real
+      nested walk — sections outer, that section's own fields inner —
+      rather than a flat field list with a heading injected whenever the
+      section happened to change. A section with no renderable field left
+      in it (every field hidden, or the whole section itself gated shut)
+      renders nothing at all: no orphan heading.
+
+      Two different reasons a field renders NO input at all here — and in
+      both cases the absence IS the security boundary, not a cosmetic hide,
+      because the server discards anything a crafted request sends for such
+      a token anyway (see AnswerResolver):
+
+      * PRD M8 — `hidden?`, whose value comes from the author's preset.
+      * PRD M11 — the section itself has a visibility rule that evaluates
+        false for the answers so far (@form.visible_sections). %>
+  <% @form.visible_sections(@answers).each do |section| %>
+    <% renderable_fields = section.fields.reject(&:hidden?) %>
+    <% next if renderable_fields.empty? %>
+
+    <h3 class="efd-form-section" data-cy="section__group--<%= section.token %>"><%= section.name %></h3>
+
+    <% renderable_fields.each do |field| %>
+    <% name = "answers[#{field.token}]" %>
+    <% value = @answers[field.token] %>
+    <% field_messages = Array(@field_errors && @field_errors[field.token]) %>
+
+    <% # Only DSPasswordField supports helper_text natively — every other DS
+       # form control here does not, so field.help_text is rendered as a
+       # plain caption instead of being passed through as a keyword. %>
+    <% case field.widget %>
+    <% when "long_text" %>
+      <%= ds_textarea(name: name, value: value, label: field.label,
+                      required: field.required?, rows: 4) %>
+    <% when "select" %>
+      <%# Plain native select, not ds_select — see the note in
+          easy_form_designer_forms/new.html.erb: <easy8-ds-select> crashes
+          its own internal Vue mount client-side regardless of wrapping
+          context, leaving the dropdown permanently empty. A requester
+          hitting that on a real Dropdown-mapped field would be unable to
+          submit at all, so this isn't a cosmetic downgrade.
+
+          It is also the only shape that works as a rule trigger: DSSelect
+          submits through a hidden input, and Vue writing .value on a hidden
+          input dispatches no `change` event at all. %>
+      <div class="form-group">
+        <label for="field_<%= field.token %>">
+          <%= field.label %><%= " *".html_safe if field.required? %>
+        </label>
+        <%# include_blank is unconditional — a required field must still
+            start with nothing chosen. `include_blank: !field.required?`
+            here previously meant a required select had no blank option,
+            so the browser auto-selected the first real option (e.g.
+            "Low" priority) with no requester action at all: a silently
+            guessed answer, not a validated one. required: still applies
+            the native HTML — and our own — required check to the blank
+            option, so an unanswered required select is now caught rather
+            than defaulted. %>
+        <%= select_tag name,
+                      options_for_select(field.options, value),
+                      include_blank: true, required: field.required?,
+                      id: "field_#{field.token}" %>
+      </div>
+    <% when "number" %>
+      <%# The author's M7 range, when set, wins over the implicit floor.
+          min: 0 remains the fallback for the one native attribute with a
+          known-safe floor (estimated hours can't be negative) — dropping it
+          when no range is authored would be a regression. The server
+          re-checks both bounds regardless; these attributes only save the
+          requester a round trip. %>
+      <%# format_bound, not the raw BigDecimal: these land in the component's
+          data attributes via to_s, and BigDecimal#to_s emits scientific
+          notation — a maximum of 40 would reach the browser as min="0.4e2",
+          which it ignores, silently dropping the client-side bound. %>
+      <% min_bound = EasyFormDesigner::FormField.format_bound(field.min_value) %>
+      <%= ds_number_field(name: name, value: value, label: field.label,
+                          required: field.required?,
+                          min: min_bound || (0 if field.mapped_attribute == "estimated_hours"),
+                          max: EasyFormDesigner::FormField.format_bound(field.max_value)) %>
+    <% when "radio" %>
+      <%# Plain radio_button_tag, not ds_radio_group — DSRadioGroup's
+          "options" prop never hydrates from the server-rendered
+          <script type="application/json"> prop tag outside the SPA
+          mount context (confirmed live: Vue logs "Missing required
+          prop: options" and the fieldset renders with no inputs at
+          all), the same class of standalone-mount limitation already
+          documented above for <easy8-ds-select>. %>
+      <fieldset class="form-group">
+        <legend><%= field.label %><%= " *".html_safe if field.required? %></legend>
+        <% field.options.each do |option_label, option_value| %>
+          <label>
+            <%= radio_button_tag name, option_value, value == option_value,
+                                 required: field.required? %>
+            <%= option_label %>
+          </label>
+        <% end %>
+      </fieldset>
+    <% when "multi_select" %>
+      <%# Same reasoning as the "select" case above: a multi-value select
+          has the identical <easy8-ds-select> mount bug, so it inherits the
+          identical plain select_tag fallback — here with multiple: true
+          and an array-shaped param name. %>
+      <div class="form-group">
+        <label for="field_<%= field.token %>">
+          <%= field.label %><%= " *".html_safe if field.required? %>
+        </label>
+        <%= select_tag "#{name}[]",
+                      options_for_select(field.options, Array(value)),
+                      multiple: true, required: field.required?,
+                      id: "field_#{field.token}" %>
+      </div>
+    <% when "checkbox" %>
+      <%# Plain check_box_tag, not DesignSystem::Components::Checkbox —
+          its "option" prop has the same standalone-mount hydration
+          failure described above for RadioGroup (confirmed live: Vue
+          logs "Missing required prop: option" and nothing renders).
+          hidden_field_tag first is the standard Rails idiom so an
+          unchecked box still submits "0" rather than nothing at all —
+          without it, missing?/answerable? below would see no param and
+          treat "explicitly unchecked" as "never answered" again, the
+          exact bug this widget exists to fix. %>
+      <%# id: nil — hidden_field_tag and check_box_tag otherwise both
+          default their id from the same name, which is invalid HTML
+          (duplicate ids) and made Playwright resolve the wrong element
+          during verification. %>
+      <%= hidden_field_tag name, "0", id: nil %>
+      <label>
+        <%= check_box_tag name, "1", value == "1" %>
+        <%= field.label %><%= " *".html_safe if field.required? %>
+      </label>
+    <% when "user" %>
+      <%# No bare ds_autocomplete helper exists in core, so the component is
+          called directly — same reasoning as Checkbox above. Scoped to this
+          form's own project via collection_args, the same mechanism core
+          itself uses to scope a principal autocomplete to one project's
+          members rather than the whole instance. %>
+      <%= DesignSystem::Components::Autocomplete.render(
+            view_context: self, entity: "principal", name: name,
+            label: field.label, required: field.required?,
+            clearable: !field.required?,
+            settings: { collection: "visible_active_users",
+                        collection_args: { project_id: @form.project.id } },
+            value: existing_principal_value(value)
+          ) %>
+    <% when "date" %>
+      <%# DesignSystem::Components::Datepicker has no required: keyword at
+          all (confirmed from its initialize signature) — passing one
+          raises ArgumentError unconditionally. label: is omitted and
+          replaced with a manual <label> so the required marker matches
+          every other field type's plain asterisk instead of a separate
+          "Required" line — Datepicker manages its own internal id/label
+          pairing regardless of whether label: is passed, so nothing is
+          lost by supplying our own here. Required-ness is still enforced
+          server-side by missing_required_fields regardless of this.
+
+          An authored date-range rule (SubmissionValidator) has NO
+          client-side counterpart here, unlike email/URL/number — the
+          component takes no min/max keyword at all, so there is nothing to
+          pass one through to. The requester only learns about it from the
+          server-side error after submitting; that is the correct behaviour
+          for this widget today, not a shortcut taken under time
+          pressure. %>
+      <label>
+        <%= field.label %><%= " *".html_safe if field.required? %>
+      </label>
+      <%= ds_datepicker(name: name, value: value, label: nil) %>
+    <% when "file" %>
+      <%# PRD M13. A plain file_field_tag, not DSFileUpload — the DS
+          component is Vue-only (there is no ds_file_upload helper and no
+          server-side FileUpload wrapper class), and every other complex DS
+          component tried in this view failed to hydrate when mounted
+          standalone outside the SPA shell (see the select/radio/checkbox/
+          autocomplete notes above). No reason to expect a fifth one to
+          behave differently.
+
+          No value: — browsers refuse to pre-populate a file input, for
+          obvious security reasons. A refresh of this frame would therefore
+          lose an already-picked file, which is why the refresh script moves
+          the live input element across instead of letting Turbo replace it
+          (see submission_form.ts). It is a plain input precisely because
+          that transplant is safe — a DS custom element must never be
+          re-inserted, its prop <script> children are consumed on first mount.
+
+          The [] suffix is what makes Rails collect several uploads into
+          one array under this field's token, which is what
+          IssueBuilder#attach_files iterates. %>
+      <label>
+        <%= field.label %><%= " *".html_safe if field.required? %>
+      </label>
+      <%= file_field_tag "#{name}[]", multiple: true, id: "field_#{field.token}" %>
+    <% else %>
+      <%# An M7 email/URL rule also drives the input type, so the browser
+          checks before a round trip. TextField#initialize does accept type:.
+          The server is still the authority — see SubmissionValidator, whose
+          URL rule requires the same explicit scheme type="url" demands, so
+          the two never disagree about the same value. %>
+      <%= ds_text_field(name: name, value: value, label: field.label,
+                        required: field.required?,
+                        type: EasyFormDesigner::FormField::HTML_INPUT_TYPES[field.validation_format]) %>
+    <% end %>
+
+    <% if field.help_text.present? %>
+      <p class="caption"><%= field.help_text %></p>
+    <% end %>
+
+    <%# Every message SubmissionValidator (or the rejected Issue) produced for
+        this specific field. Previously a single hardcoded "cannot be blank",
+        which was the only failure that could be attributed to a field at
+        all — every format or custom-field rule ended up in the flash. %>
+    <% field_messages.each do |message| %>
+      <span class="ds-form-field__error"><%= message %></span>
+    <% end %>
+    <% end %>
+  <% end %>
+<% end %>

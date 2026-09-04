@@ -1,0 +1,37 @@
+<%# Confirmation — PRD M9 requires the requester gets a task reference back. %>
+<%= title l(:notice_successful_create) %>
+
+<%= ds_alert(
+      variant: :success,
+      header: l(:notice_successful_create),
+      body: l(:label_issue) + " ##{@submission.issue&.id} " + l(:field_created_on) + " " +
+            format_time(@submission.created_at)
+    ) %>
+
+<% if @submission.issue %>
+  <p>
+    <%= link_to "##{@submission.issue.id} #{@submission.issue.subject}",
+                issue_path(@submission.issue) %>
+    &mdash; <%= link_to_project @submission.form.project %>
+  </p>
+
+  <fieldset class="collapsible collapsed">
+    <legend onclick="toggleFieldset(this);"><%= l(:label_details) %></legend>
+    <div style="display:none;">
+      <table class="list">
+        <tbody>
+          <% @submission.form.fields.each do |field| %>
+            <tr>
+              <th><%= field.label %></th>
+              <td><%= @submission.answer_for(field.token) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </fieldset>
+<% end %>
+
+<p>
+  <%= link_to l(:label_new), new_easy_form_designer_form_submission_path(@submission.form) %>
+</p>

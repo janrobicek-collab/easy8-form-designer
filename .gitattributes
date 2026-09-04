@@ -1,0 +1,12 @@
+# This code is authored on Windows but runs on Linux (WSL / the Easy8 container).
+# Force LF so shell scripts keep working shebangs and Ruby/ERB files don't pick
+# up CRLF — the Easy8 docker README calls this out for Windows contributors.
+* text=auto eol=lf
+
+# Never touch binaries.
+*.png binary
+*.jpg binary
+*.ico binary
+*.ttf binary
+*.woff binary
+*.woff2 binary

@@ -21,3 +21,7 @@ vendor/bundle
 # OS / editor cruft
 .DS_Store
 Thumbs.db
+
+# Local reference checkout of the Easy8 app (~260MB) — not part of this repo.
+# The engine is overlaid into it by symlink; see CORE_CHANGES.md.
+easy8_source_code/
